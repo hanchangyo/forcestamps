@@ -37,18 +37,17 @@ def findCircles(dots, radius):
     # prepare an array to return center candidates
     circleCenters = []
 
-    if q < 2 * radius:
-        # middle point
-        x3 = (x1 + x2) / 2
-        y3 = (y1 + y2) / 2
+    # middle point
+    x3 = (x1 + x2) / 2
+    y3 = (y1 + y2) / 2
 
-        x = x3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
-        y = y3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
-        circleCenters.append((x, y))
+    x = x3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
+    y = y3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
+    circleCenters.append((x, y))
 
-        x = x3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
-        y = y3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
-        circleCenters.append((x, y))
+    x = x3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
+    y = y3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
+    circleCenters.append((x, y))
 
     return circleCenters
 
@@ -72,11 +71,12 @@ def findMarker(img, markerRadius, distanceTolerance=1):
 
     circleCenters = []
     # make combination of two to find circle peaks
-    for peaks_2 in itertools.combinations(peaks, 2):
-        circleCenters_2 = findCircles(peaks_2, markerRadius)
-        # parse the obtained center candidates
-        for circleCenters_1 in circleCenters_2:
-            circleCenters.append(circleCenters_1)
+    for peaks_comb in itertools.combinations(peaks, 2):
+        if distance(peaks_comb[0], peaks_comb[1]) < markerRadius * 2.1:
+            circleCenters_2 = findCircles(peaks_comb, markerRadius)
+            # parse the obtained center candidates
+            for circleCenters_1 in circleCenters_2:
+                circleCenters.append(circleCenters_1)
 
     # find marker center candidates by given radidus
     markerCenters = []

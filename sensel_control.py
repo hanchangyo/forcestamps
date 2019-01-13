@@ -12,6 +12,7 @@ sys.path.append('sensel-lib-python')
 import sensel
 import numpy as np
 
+
 def open_sensel():
     handle = None
     error, device_list = sensel.getDeviceList()
@@ -26,12 +27,12 @@ def open_sensel():
 def init_frame(handle, setrate=2000, detail=0):
 
     # Frame rate
-    setrate = 2000
+    # setrate = 2000
     error = sensel.setMaxFrameRate(handle, setrate)
 
     # Scan detail
     # 0 for high, 1 for medium, 2 for low
-    detail = 0
+    # detail = 0
     error = sensel.setScanDetail(handle, detail)
 
     error, rate = sensel.getMaxFrameRate(handle)
@@ -44,7 +45,7 @@ def init_frame(handle, setrate=2000, detail=0):
     error, val = sensel.getDynamicBaseline(handle)
     print('Dynamic baseline: ' + str(val))
 
-    error = sensel.setEnableBlobMerge(handle, -1)
+    error = sensel.setEnableBlobMerge(handle, 0)
     error, val = sensel.getEnableBlobMerge(handle)
     print('Blob merge: ' + str(val))
 
@@ -60,6 +61,7 @@ def init_frame(handle, setrate=2000, detail=0):
     # mask = sensel.FRAME_CONTENT_PRESSURE_MASK + sensel.FRAME_CONTENT_ACCEL_MASK
     # mask = sensel.FRAME_CONTENT_PRESSURE_MASK + sensel.FRAME_CONTENT_CONTACTS_MASK
     mask = sensel.FRAME_CONTENT_PRESSURE_MASK
+    # mask = sensel.FRAME_CONTENT_CONTACTS_MASK
     error = sensel.setFrameContent(handle, mask)
     error, frame = sensel.allocateFrameData(handle)
     error = sensel.startScanning(handle)
@@ -78,16 +80,10 @@ def scan_frames(handle, frame, info):
 
 
 def print_frame(frame, info):
-    # total_force = 0.0
-    # print('Num Contacts:', frame.n_contacts)
-    f_array = []
-    for n in range(info.num_rows * info.num_cols):
-        # total_force += frame.force_array[n]
-        f_array.append(frame.force_array[n])
-    f_array = np.reshape(np.asarray(f_array), (info.num_rows, info.num_cols))
-    # accel = frame.accel_data[0]
-    # accel_list = [accel.x, accel.y, accel.z]
-    # print(accel_list)
+    f_array = np.reshape(
+        np.asarray(frame.force_array[:info.num_rows * info.num_cols]),
+        (info.num_rows, info.num_cols)
+    )
 
     return f_array
 
