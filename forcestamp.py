@@ -22,6 +22,14 @@ def findLocalPeaks(img, threshold=0.5, kernal=3):
     return local_max
 
 
+def isDotIncluded(dot, rows=185, cols=105):
+    # check if the dot is in the pad area
+    if dot[1] > 0 and dot[1] < rows and dot[0] > 0 and dot[0] < cols:
+        return True
+    else:
+        return False
+
+
 def findCircles(dots, radius):
     # find circle center candidates from two dots on the circle
 
@@ -34,22 +42,19 @@ def findCircles(dots, radius):
     # distance between pt1 and pt2
     q = np.sqrt(((x2 - x1) * (x2 - x1)) + ((y2 - y1) * (y2 - y1)))
 
-    # prepare an array to return center candidates
-    circleCenters = []
-
     # middle point
     x3 = (x1 + x2) / 2
     y3 = (y1 + y2) / 2
 
-    x = x3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
-    y = y3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
-    circleCenters.append((x, y))
+    cnt1_x = x3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
+    cnt1_y = y3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
+    cnt1 = (cnt1_x, cnt1_y)
 
-    x = x3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
-    y = y3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
-    circleCenters.append((x, y))
+    cnt2_x = x3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
+    cnt2_y = y3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
+    cnt2 = (cnt2_x, cnt2_y)
 
-    return circleCenters
+    return cnt1, cnt2
 
 
 def distance(pt1, pt2):
@@ -72,22 +77,30 @@ def findMarker(img, markerRadius, distanceTolerance=1):
     circleCenters = []
     # make combination of two to find circle peaks
     for peaks_comb in itertools.combinations(peaks, 2):
-        if distance(peaks_comb[0], peaks_comb[1]) < markerRadius * 2.1:
-            circleCenters_2 = findCircles(peaks_comb, markerRadius)
+        if distance(peaks_comb[0], peaks_comb[1]) < markerRadius * 2.0:
+            circleCenter1, circleCenter2 = findCircles(
+                peaks_comb, markerRadius)
             # parse the obtained center candidates
-            for circleCenters_1 in circleCenters_2:
-                circleCenters.append(circleCenters_1)
+            if isDotIncluded(circleCenter1):
+                circleCenters.append(circleCenter1)
+            if isDotIncluded(circleCenter2):
+                circleCenters.append(circleCenter2)
+    # print(len(circleCenters))
 
-    # find marker center candidates by given radidus
+    # find marker center candidates by given radius
     markerCenters = []
     for cnt in circleCenters:
         distanceCount = 0
+        inboundPeakCount = 0
         for peak in peaks:
             if distance(cnt, peak) < markerRadius + distanceTolerance and \
                distance(cnt, peak) > markerRadius - distanceTolerance:
                 distanceCount += 1
-        # if there are less than 5 dots on the circle
-        if distanceCount > 4:
+            if distance(cnt, peak) < markerRadius - distanceTolerance:
+                inboundPeakCount += 1
+        # if there are less than 3 dots on the circle
+        # and less than 3 dots inside the circle
+        if distanceCount > 4 and inboundPeakCount < 4:
             markerCenters.append(cnt)
 
     # cluster and average marker center candidates to find accurate centers
@@ -132,7 +145,7 @@ def findMarker(img, markerRadius, distanceTolerance=1):
         averageCoordY /= len(cluster)
         markerCentersFiltered.append((averageCoordX, averageCoordY))
 
-    return markerCentersFiltered
+    return markerCentersFiltered, markerCenters
 
 
 def constraint(input, const_floor, const_ceil):
@@ -260,11 +273,13 @@ def extractCode(img, markerRadius, distTolerance=3):
     #     codes.append(result)
 
     # codes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    return codes, dotRegions
+    # print(codes)
+    # print(phaseError)
+    return codes, dotRegions, phaseError
 
 
 def recognizeID(msg, full=False):
-    # recognize ID by the received codeword
+    # recognize ID by decoded codeword
     codeList = [
         [0],
         [32, 1, 34, 3, 68, 7, 8, 64, 14, 16, 81, 116, 104, 58, 29],
@@ -396,15 +411,60 @@ class marker:
 
         self.markerImgPeak = cropImage(imgPeak, pos, markerRadius)
 
-        self.code, self.dotRegions = extractCode(
+        self.code, self.dotRegions, self.phaseError = extractCode(
             self.markerImgPeak,
             markerRadius
         )
-        self.ID = recognizeID(bch.bchDecode15_7(self.code))
-        # self.rotation = 0 TODO
+
+        self.ID = recognizeID(
+            bch.bchDecode15_7(self.code)
+        )
+
+        # self.absRot = calculateAbsoluteRotation(
+        #     self.ID,
+        #     self.code,
+        #     self.phaseError
+        # )
 
     def vectorForce(self):
         return calculateForceVector(self.markerImg)
 
     def sumForce(self):
         return np.sum(self.markerImg)
+
+    def calculateAbsoluteRotation(self):
+        # define initial position of code with ID
+        uniqueCodes = [
+            np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.int),
+            np.array([1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0], dtype=np.int),
+            np.array([1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0], dtype=np.int),
+            np.array([1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0], dtype=np.int),
+            np.array([1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0], dtype=np.int),
+            np.array([1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0], dtype=np.int),
+            np.array([1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0], dtype=np.int),
+            np.array([1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0], dtype=np.int),
+            np.array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0], dtype=np.int),
+            np.array([1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0], dtype=np.int),
+            np.array([1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0], dtype=np.int),
+            np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int)
+        ]
+
+        # filter out the code by ID
+        initalCode = uniqueCodes[self.ID].tolist()
+
+        # correct the error in the received codeword
+        code = bch.calculateSyndrome(self.code)
+
+        # count the number of shifts from the initial position
+        nShift = 0
+        for i in range(len(code)):
+            codeShift = np.roll(code, i).tolist()
+            if initalCode == codeShift:
+                nShift = i
+                break
+
+        n = 15
+        rotation = (2 * np.pi / n * nShift - self.phaseError) % (2 * np.pi)
+        # print(self.phaseError)
+
+        return rotation

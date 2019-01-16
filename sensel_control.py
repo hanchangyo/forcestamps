@@ -24,7 +24,7 @@ def open_sensel():
     return handle, info
 
 
-def init_frame(handle, setrate=2000, detail=0):
+def init_frame(handle, setrate=125, detail=0, devbuffer=10):
 
     # Frame rate
     # setrate = 2000
@@ -63,6 +63,12 @@ def init_frame(handle, setrate=2000, detail=0):
     mask = sensel.FRAME_CONTENT_PRESSURE_MASK
     # mask = sensel.FRAME_CONTENT_CONTACTS_MASK
     error = sensel.setFrameContent(handle, mask)
+
+    # set buffer control
+    error = sensel.setBufferControl(handle, devbuffer)
+    error, val = sensel.getBufferControl(handle)
+    print('Device buffer: ' + str(val))
+
     error, frame = sensel.allocateFrameData(handle)
     error = sensel.startScanning(handle)
     return frame

@@ -88,7 +88,7 @@ handle, info = sc.open_sensel()
 frame = sc.init_frame(handle)
 
 # update interval
-interval = 0  # about 60 FPS
+interval = 0  # miliseconds
 
 lastTime = time()
 fps = None
@@ -105,7 +105,6 @@ client = udp_client.UDPClient(args.ip, args.port)
 def update():
     global lastTime, fps
     f_image = sc.scan_frames(handle, frame, info)
-    f_image = np.array(f_image)
 
     # find local peaks
     peakThreshold = 0.5
@@ -114,26 +113,31 @@ def update():
     # extract marker centers
     markerRadius = 20
     # markerRadius = 20 / 1.25
-    markerCenters = forcestamp.findMarker(f_image_peaks, markerRadius)
+    
+    # find marker objects
+    markerCenters, markerCenters_raw = forcestamp.findMarker(f_image_peaks, markerRadius, 1)
+    # print(markerCenters)
 
     markers = []
     for i in range(len(markerCenters)):
         # print(cnt)
         markers.append(forcestamp.marker(f_image, f_image_peaks, markerRadius, markerCenters[i]))
-        # print('markerX: ' + str(markers[0].posX))
-        # print('markerY: ' + str(markers[0].posY))
+        print('markerX: ' + str(markers[0].posX))
+        print('markerY: ' + str(markers[0].posY))
         # print('markerCode: ' + str(markers[0].code))
 
     if len(markers) > 0:
-        # print('markerID: ' + str(markers[0].ID))
-        # print('markerForce: ' + str(markers[0].sumForce()))
-        # print('markerVectorForce: ' + str(markers[0].vectorForce()))
+        print('markerID: ' + str(markers[0].ID))
+        print('markerForce: ' + str(markers[0].sumForce()))
+        print('markerVectorForce: ' + str(markers[0].vectorForce()))
+        print('markerAbsRot: ' + str(np.rad2deg(markers[0].calculateAbsoluteRotation())))
         img2.setImage(np.rot90(markers[0].markerImg, 3), autoLevels=False, levels=(0, 100))
         img3.setImage(np.rot90(markers[0].markerImgPeak, 3), autoLevels=True, levels=(0, 50))
 
     # print('------------------------')
 
     # send MIDI & OSC messages
+    '''
     if len(markers) == 0:
         for i in range(1, 12):
             sendOSC(0, '/m' + str(i) + '/is')
@@ -143,6 +147,7 @@ def update():
             # yMap = int((forcestamp.constraint(mkr.posY, 25, 75) - 25) / 50 * 127)
             # vel = int((forcestamp.constraint(mkr.sumForce(), 1000, 10000) / 9000 * 127))
 
+
             # OSC message
             # print(str(mkr.ID))
             sendOSC(1, '/m' + str(mkr.ID) + '/is')
@@ -150,10 +155,11 @@ def update():
             tilt_v = (forcestamp.constraint(mkr.vectorForce()[1], -20000, 20000) + 20000) / 40000 * 0.25
             sendOSC(mkr.posX, '/m' + str(mkr.ID) + '/posX')
             sendOSC(mkr.posY, '/m' + str(mkr.ID) + '/posY')
-            sendOSC(mkr.sumForce(), '/m' + str(mkr.ID) + '/force')
-            print(mkr.sumForce())
+            # sendOSC(mkr.sumForce(), '/m' + str(mkr.ID) + '/force')
+            # print(mkr.sumForce())
             sendOSC(tilt_h, '/m' + str(mkr.ID) + '/tilt_h')
             sendOSC(tilt_v, '/m' + str(mkr.ID) + '/tilt_v')
+    '''
 
     # print(markers)
 
@@ -182,7 +188,7 @@ def update():
             (0, 255, 255)
         )
 
-    for cnt in markerCenters:
+    for cnt in markerCenters_raw:
         cv2.circle(
             f_image_show,
             (np.int(cnt[::-1][0]), np.int(cnt[::-1][1])),
@@ -190,13 +196,13 @@ def update():
             (0, 255, 0)
         )
 
-    # display ID
-    if len(markers) > 0:
-        for mkr in markers:
-            # print(codes)
-            ID = mkr.ID
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(f_image_show, str(ID), (int(mkr.posX), int(mkr.posY)), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    # # display ID
+    # if len(markers) > 0:
+    #     for mkr in markers:
+    #         # print(codes)
+    #         ID = mkr.ID
+    #         font = cv2.FONT_HERSHEY_SIMPLEX
+    #         cv2.putText(f_image_show, str(ID), (int(mkr.posX), int(mkr.posY)), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
 
     # img1.setImage(np.rot90(f_image, 3), autoLevels=True, levels=(0, 50))
@@ -212,7 +218,7 @@ def update():
         s = np.clip(dt * 3., 0, 1)
         fps = fps * (1 - s) + (1.0 / dt) * s
 
-    print('%0.2f fps' % fps)
+    # print('%0.2f fps' % fps)
     QtGui.QApplication.processEvents()
 
 

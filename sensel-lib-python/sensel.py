@@ -273,3 +273,15 @@ def getEnableBlobMerge(handle):
     val = c_ubyte(0)
     error = sensel_lib.senselGetContactsEnableBlobMerge(handle, byref(val))
     return (error, val.value)
+
+
+def setBufferControl(handle, flag):
+    c_flag = c_ubyte(flag)
+    error = sensel_lib.senselSetBufferControl(handle, c_flag)
+    return error
+
+
+def getBufferControl(handle):
+    val = c_ubyte(0)
+    error = sensel_lib.senselGetBufferControl(handle, byref(val))
+    return (error, val.value)
