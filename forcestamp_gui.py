@@ -96,7 +96,15 @@ class ForceStamp (QtWidgets.QWidget):
 
     def update(self, peakThreshold=0.5, markerRadius=20):
         # scan image from the device
-        self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
+        try:
+            self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
+        except(UnboundLocalError):
+            sc.close_sensel(self.handle, self.frame)
+            # Open Morph
+            self.handle, self.info = sc.open_sensel()
+            # Initalize frame
+            self.frame = sc.init_frame(self.handle)
+            self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
 
         # find local peaks
         self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image, peakThreshold)
@@ -104,6 +112,7 @@ class ForceStamp (QtWidgets.QWidget):
         # find marker objects
         markerCenters, markerCenters_raw = forcestamp.findMarker(self.f_image_peaks, markerRadius, distanceTolerance=1)
 
+        # retrieve marker parameters from marker coordinates
         self.markers = []
         for i in range(len(markerCenters)):
             # print(cnt)
@@ -117,13 +126,19 @@ class ForceStamp (QtWidgets.QWidget):
             print('markerForce: ' + str(self.markers[0].sumForce()))
             print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
 
+        # send marker parameters to GUI
+        self.sendMarkerParameters()
+
+        # retrieve peak coordinates from the peak image
         self.peaks = forcestamp.findPeakCoord(self.f_image_peaks)
 
+        # prepare a image copy for display
         f_image_show = deepcopy(self.f_image)
         if np.max(f_image_show) > 0:
             f_image_show = f_image_show / np.max(f_image_show) * 255
         f_image_show = cv2.cvtColor(f_image_show.astype(np.uint8), cv2.COLOR_GRAY2RGB)
 
+        # draw peaks
         for cnt in self.peaks:
             cv2.circle(
                 f_image_show,
@@ -132,10 +147,22 @@ class ForceStamp (QtWidgets.QWidget):
                 (0, 255, 255)
             )
 
+        # set image for display
         self.img.setImage(np.rot90(f_image_show, 3), autoLevels=True, levels=(0, 50))
 
         self.calculateFPS()
         QtGui.QApplication.processEvents()
+
+    def sendMarkerParameters(self):
+        for mkr in self.markers:
+            if self.currentID == mkr.ID and mkr.ID is not 0:
+                print('match!')
+                # send current parameters
+                self.ui.progressBar_posx.setValue(mkr.posX)
+                self.ui.progressBar_posy.setValue(mkr.posY)
+                self.ui.progressBar_force.setValue(mkr.sumForce())
+                self.ui.progressBar_vecx.setValue(mkr.vectorForce()[0])
+                self.ui.progressBar_vecy.setValue(mkr.vectorForce()[1])
 
     def calculateFPS(self):
         now = time()
@@ -283,4 +310,5 @@ if __name__ == '__main__':
     window.show()
     app.exec_()
     print('Closed the window')
+    sc.close_sensel(window.handle, window.frame)
     sys.exit()
