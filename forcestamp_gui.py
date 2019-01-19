@@ -9,11 +9,19 @@ except NameError:
 
 import sys
 import numpy as np
+import cv2
+from pythonosc import osc_message_builder
+from pythonosc import udp_client
+import argparse
+from copy import deepcopy
 
 from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5 import QtWidgets
 import pyqtgraph as pg
-# from pyqtgraph.ptime import time
+from pyqtgraph.ptime import time
+
+import sensel_control as sc
+import forcestamp
 
 from forcestamp_ui import Ui_MainWindow
 
@@ -46,6 +54,10 @@ class ForceStamp (QtWidgets.QWidget):
         self.param_names = ['posx_max', 'posx_min', 'posy_max', 'posy_min', 'force_max',
                             'force_min', 'vecx_max', 'vecx_min', 'vecy_max', 'vecy_min']
 
+        # Morph size
+        self.rows = 185
+        self.cols = 105
+
         # Initialize combobox items
         self.initComboBox()
 
@@ -60,10 +72,92 @@ class ForceStamp (QtWidgets.QWidget):
 
         # initialize force image
         self.initViewBox()
+
+        # Open Morph
+        self.handle, self.info = sc.open_sensel()
+        # Initalize frame
+        self.frame = sc.init_frame(self.handle)
+
+        # update interval
+        self.interval = 0  # miliseconds
+
+        self.lastTime = time()
+        self.fps = None
+
+        # update using timer
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update)
+        self.timer.start(self.interval)
+
         # TODO
         # draw vector representation of markers
         # display tooltip on marker position
         # make the progress bar more fancy
+
+    def update(self, peakThreshold=0.5, markerRadius=20):
+        # scan image from the device
+        self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
+
+        # find local peaks
+        self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image, peakThreshold)
+
+        # find marker objects
+        markerCenters, markerCenters_raw = forcestamp.findMarker(self.f_image_peaks, markerRadius, distanceTolerance=1)
+
+        self.markers = []
+        for i in range(len(markerCenters)):
+            # print(cnt)
+            self.markers.append(forcestamp.marker(self.f_image, self.f_image_peaks, markerRadius, markerCenters[i]))
+            print('markerX: ' + str(self.markers[0].posX))
+            print('markerY: ' + str(self.markers[0].posY))
+            # print('markerCode: ' + str(self.markers[0].code))
+
+        if len(self.markers) > 0:
+            print('markerID: ' + str(self.markers[0].ID))
+            print('markerForce: ' + str(self.markers[0].sumForce()))
+            print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
+
+        self.peaks = forcestamp.findPeakCoord(self.f_image_peaks)
+
+        f_image_show = deepcopy(self.f_image)
+        if np.max(f_image_show) > 0:
+            f_image_show = f_image_show / np.max(f_image_show) * 255
+        f_image_show = cv2.cvtColor(f_image_show.astype(np.uint8), cv2.COLOR_GRAY2RGB)
+
+        for cnt in self.peaks:
+            cv2.circle(
+                f_image_show,
+                (np.int(cnt[::-1][0]), np.int(cnt[::-1][1])),
+                0,
+                (0, 255, 255)
+            )
+
+        self.img.setImage(np.rot90(f_image_show, 3), autoLevels=True, levels=(0, 50))
+
+        self.calculateFPS()
+        QtGui.QApplication.processEvents()
+
+    def calculateFPS(self):
+        now = time()
+        dt = now - self.lastTime
+        self.lastTime = now
+
+        if self.fps is None:
+            self.fps = 1.0 / dt
+        else:
+            s = np.clip(dt * 3., 0, 1)
+            self.fps = self.fps * (1 - s) + (1.0 / dt) * s
+
+        print('%0.2f fps' % self.fps)
+
+    def setupOSC(self):
+        # setup OSC server
+        port_num = 8002
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--ip", default="127.0.0.1", help="The ip of th OSC Server")
+        parser.add_argument("--port", type=int, default=port_num, help="The port the OSC server is listening on")
+        args = parser.parse_args()
+        self.client = udp_client.UDPClient(args.ip, args.port)
 
     def initViewBox(self):
         # Create random image
@@ -76,6 +170,7 @@ class ForceStamp (QtWidgets.QWidget):
         # self.ui.graphicsView.scale(50, 50)
         # view.setCentralWidget(viewBox)
         self.viewBox.addItem(self.img)
+        self.viewBox.setAspectLocked(True)
         self.viewBox.setRange(QtCore.QRectF(0, 0, 185 * 1, 105 * 1), padding=0)
         self.viewBox.setMouseEnabled(x=False, y=False)
         self.viewBox.setMenuEnabled(False)
