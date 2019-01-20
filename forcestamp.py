@@ -69,7 +69,7 @@ def findPeakCoord(img):
     return peaks
 
 
-def findMarker(img, markerRadius, distanceTolerance=1):
+def findMarker(img, markerRadius=20, distanceTolerance=1):
     # find marker pin peaks from the peak image
     # distanceTolerance: tolerance when finding marker center candidates
     peaks = findPeakCoord(img)
@@ -206,9 +206,13 @@ def extractCode(img, markerRadius, distTolerance=3):
     for i in trueDots:
         data[0].append(i[0])
         data[1].append(i[1])
-    lsqe = ellipses.LSqEllipse()
-    lsqe.fit(data)
-    center, width, height, phi = lsqe.parameters()
+
+    try:
+        lsqe = ellipses.LSqEllipse()
+        lsqe.fit(data)
+        center, width, height, phi = lsqe.parameters()
+    except(IndexError):
+        center = markerCenter
     # print('circle center: ', tuple(center))
 
     # make the dots as vectors from center point

@@ -7,7 +7,7 @@
 # WARNING! All changes made in this file will be lost!
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from pyqtgraph import GraphicsView, GraphicsLayoutWidget
+from pyqtgraph import GraphicsLayoutWidget
 
 
 class Ui_MainWindow(object):
@@ -194,14 +194,14 @@ class Ui_MainWindow(object):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "ForceStamp"))
         self.GroupParameterScale.setTitle(_translate("MainWindow", "Parameter Scale"))
-        self.progressBar_posx.setFormat(_translate("MainWindow", "%p%"))
         self.label_posx.setText(_translate("MainWindow", "PosX"))
         self.label_posy.setText(_translate("MainWindow", "PosY"))
-        self.progressBar_posy.setFormat(_translate("MainWindow", "%p%"))
         self.label_force.setText(_translate("MainWindow", "Force"))
-        self.progressBar_force.setFormat(_translate("MainWindow", "%p%"))
         self.label_vecx.setText(_translate("MainWindow", "VecX"))
-        self.progressBar_vecx.setFormat(_translate("MainWindow", "%p%"))
         self.label_vecy.setText(_translate("MainWindow", "VecY"))
-        self.progressBar_vecy.setFormat(_translate("MainWindow", "%p%"))
         self.label_ID.setText(_translate("MainWindow", "Marker ID"))
+        self.progressBar_posx.setFormat(_translate("MainWindow", "%.02f"))
+        self.progressBar_posy.setFormat(_translate("MainWindow", "%.02f"))
+        self.progressBar_force.setFormat(_translate("MainWindow", "%.02f"))
+        self.progressBar_vecx.setFormat(_translate("MainWindow", "%.02f"))
+        self.progressBar_vecy.setFormat(_translate("MainWindow", "%.02f"))

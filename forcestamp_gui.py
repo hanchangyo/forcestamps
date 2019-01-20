@@ -57,6 +57,7 @@ class ForceStamp (QtWidgets.QWidget):
         # Morph size
         self.rows = 185
         self.cols = 105
+        self.markerRadius = 20
 
         # Initialize combobox items
         self.initComboBox()
@@ -94,7 +95,7 @@ class ForceStamp (QtWidgets.QWidget):
         # display tooltip on marker position
         # make the progress bar more fancy
 
-    def update(self, peakThreshold=0.5, markerRadius=20):
+    def update(self):
         # scan image from the device
         try:
             self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
@@ -107,24 +108,24 @@ class ForceStamp (QtWidgets.QWidget):
             self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
 
         # find local peaks
-        self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image, peakThreshold)
+        self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image)
 
         # find marker objects
-        markerCenters, markerCenters_raw = forcestamp.findMarker(self.f_image_peaks, markerRadius, distanceTolerance=1)
+        markerCenters, markerCenters_raw = forcestamp.findMarker(self.f_image_peaks, self.markerRadius)
 
         # retrieve marker parameters from marker coordinates
         self.markers = []
         for i in range(len(markerCenters)):
             # print(cnt)
-            self.markers.append(forcestamp.marker(self.f_image, self.f_image_peaks, markerRadius, markerCenters[i]))
-            print('markerX: ' + str(self.markers[0].posX))
-            print('markerY: ' + str(self.markers[0].posY))
+            self.markers.append(forcestamp.marker(self.f_image, self.f_image_peaks, self.markerRadius, markerCenters[i]))
+            # print('markerX: ' + str(self.markers[0].posX))
+            # print('markerY: ' + str(self.markers[0].posY))
             # print('markerCode: ' + str(self.markers[0].code))
 
-        if len(self.markers) > 0:
-            print('markerID: ' + str(self.markers[0].ID))
-            print('markerForce: ' + str(self.markers[0].sumForce()))
-            print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
+        # if len(self.markers) > 0:
+            # print('markerID: ' + str(self.markers[0].ID))
+            # print('markerForce: ' + str(self.markers[0].sumForce()))
+            # print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
 
         # send marker parameters to GUI
         self.sendMarkerParameters()
@@ -150,19 +151,38 @@ class ForceStamp (QtWidgets.QWidget):
         # set image for display
         self.img.setImage(np.rot90(f_image_show, 3), autoLevels=True, levels=(0, 50))
 
-        self.calculateFPS()
+        # self.calculateFPS()
         QtGui.QApplication.processEvents()
 
     def sendMarkerParameters(self):
+        posx_min = 30
+        posx_max = 184 - 30
+        posy_min = 30
+        posy_max = 105 - 30
+        force_min = 0
+        force_max = 10000
+        vecx_min = -30000
+        vecx_max = 30000
+        vecy_min = -30000
+        vecy_max = 30000
+
         for mkr in self.markers:
+            mkr.posY = 105 - mkr.posY
+            mkr.force = mkr.sumForce()
+            (mkr.vecX, mkr.vecY) = mkr.vectorForce()
+            mkr.vecY *= -1
+            mkr.posX_scaled = (self.IDparam[mkr.ID].posx_max - self.IDparam[mkr.ID].posx_min) * ((forcestamp.constraint(mkr.posX, posx_min, posx_max) - posx_min) / (posx_max - posx_min)) + self.IDparam[mkr.ID].posx_min
+            mkr.posY_scaled = (self.IDparam[mkr.ID].posy_max - self.IDparam[mkr.ID].posy_min) * ((forcestamp.constraint(mkr.posY, posy_min, posy_max) - posy_min) / (posy_max - posy_min)) + self.IDparam[mkr.ID].posy_min
+            mkr.force_scaled = (self.IDparam[mkr.ID].force_max - self.IDparam[mkr.ID].force_min) * ((forcestamp.constraint(mkr.force, force_min, force_max) - force_min) / (force_max - force_min)) + self.IDparam[mkr.ID].force_min
+            mkr.vecX_scaled = (self.IDparam[mkr.ID].vecx_max - self.IDparam[mkr.ID].vecx_min) * ((forcestamp.constraint(mkr.vecX, vecx_min, vecx_max) - vecx_min) / (vecx_max - vecx_min)) + self.IDparam[mkr.ID].vecx_min
+            mkr.vecY_scaled = (self.IDparam[mkr.ID].vecy_max - self.IDparam[mkr.ID].vecy_min) * ((forcestamp.constraint(mkr.vecY, vecy_min, vecy_max) - vecy_min) / (vecy_max - vecy_min)) + self.IDparam[mkr.ID].vecy_min
             if self.currentID == mkr.ID and mkr.ID is not 0:
-                print('match!')
                 # send current parameters
-                self.ui.progressBar_posx.setValue(mkr.posX)
-                self.ui.progressBar_posy.setValue(mkr.posY)
-                self.ui.progressBar_force.setValue(mkr.sumForce())
-                self.ui.progressBar_vecx.setValue(mkr.vectorForce()[0])
-                self.ui.progressBar_vecy.setValue(mkr.vectorForce()[1])
+                self.ui.progressBar_posx.setValue(mkr.posX_scaled * 10)
+                self.ui.progressBar_posy.setValue(mkr.posY_scaled * 10)
+                self.ui.progressBar_force.setValue(mkr.force_scaled * 10)
+                self.ui.progressBar_vecx.setValue(mkr.vecX_scaled * 10)
+                self.ui.progressBar_vecy.setValue(mkr.vecY_scaled * 10)
 
     def calculateFPS(self):
         now = time()
@@ -250,12 +270,6 @@ class ForceStamp (QtWidgets.QWidget):
             evaltext = 'self.ui.doubleSpinBox_' + name + '.setValue(self.IDparam[self.currentID].' + name + ')'
             eval(evaltext)
 
-        self.ui.progressBar_posx.setRange(self.IDparam[self.currentID].posx_min, self.IDparam[self.currentID].posx_max)
-        self.ui.progressBar_posy.setRange(self.IDparam[self.currentID].posy_min, self.IDparam[self.currentID].posy_max)
-        self.ui.progressBar_force.setRange(self.IDparam[self.currentID].force_min, self.IDparam[self.currentID].force_max)
-        self.ui.progressBar_vecx.setRange(self.IDparam[self.currentID].vecx_min, self.IDparam[self.currentID].vecx_max)
-        self.ui.progressBar_vecy.setRange(self.IDparam[self.currentID].vecy_min, self.IDparam[self.currentID].vecy_max)
-
     def initSpinBox(self):
 
         for name in self.param_names:
@@ -269,46 +283,63 @@ class ForceStamp (QtWidgets.QWidget):
                     eval('self.ui.doubleSpinBox_' + name + '.setValue(0)')
             eval('self.ui.doubleSpinBox_' + name + '.setDecimals(1)')
             eval('self.ui.doubleSpinBox_' + name + '.setKeyboardTracking(False)')
-            eval('self.ui.doubleSpinBox_' + name + '.valueChanged.connect(self.changeProgressBarRange)')
+            eval('self.ui.doubleSpinBox_' + name + '.valueChanged.connect(self.spinBoxChanged)')
 
-    def changeProgressBarRange(self, value):
+    def spinBoxChanged(self, value):
         # sender is the latest signal
         sender = self.sender()
         name = sender.objectName()
 
-        # Constrain the spinbox values
-        if 'max' in name:  # if the spinbox is named 'max'
-            # compare with min value
-            compare = eval('self.ui.' + name[:-3] + 'min.value()')
-            if compare > value:
-                sender.setValue(compare)
-        else:
-            # compare with max value
-            compare = eval('self.ui.' + name[:-3] + 'max.value()')
-            if compare < value:
-                sender.setValue(compare)
+        # save current parameter
+        exectext = 'self.IDparam[self.currentID].' + name[14:] + ' = self.ui.' + name + '.value()'
+        exec(exectext)
 
+        self.updateProgressBarRange()
+
+    def updateProgressBarRange(self):
         # Change corresponding progress bar range
-        self.ui.progressBar_posx.setRange(self.ui.doubleSpinBox_posx_min.value(), self.ui.doubleSpinBox_posx_max.value())
-        self.ui.progressBar_posy.setRange(self.ui.doubleSpinBox_posy_min.value(), self.ui.doubleSpinBox_posy_max.value())
-        self.ui.progressBar_force.setRange(self.ui.doubleSpinBox_force_min.value(), self.ui.doubleSpinBox_force_max.value())
-        self.ui.progressBar_vecx.setRange(self.ui.doubleSpinBox_vecx_min.value(), self.ui.doubleSpinBox_vecx_max.value())
-        self.ui.progressBar_vecy.setRange(self.ui.doubleSpinBox_vecy_min.value(), self.ui.doubleSpinBox_vecy_max.value())
+        if self.ui.doubleSpinBox_posx_max.value() >= self.ui.doubleSpinBox_posx_min.value():
+            self.ui.progressBar_posx.setRange(10 * self.ui.doubleSpinBox_posx_min.value(), 10 * self.ui.doubleSpinBox_posx_max.value())
+        else:
+            self.ui.progressBar_posx.setRange(10 * self.ui.doubleSpinBox_posx_max.value(), 10 * self.ui.doubleSpinBox_posx_min.value())
+
+        if self.ui.doubleSpinBox_posy_max.value() >= self.ui.doubleSpinBox_posy_min.value():
+            self.ui.progressBar_posy.setRange(10 * self.ui.doubleSpinBox_posy_min.value(), 10 * self.ui.doubleSpinBox_posy_max.value())
+        else:
+            self.ui.progressBar_posy.setRange(10 * self.ui.doubleSpinBox_posy_max.value(), 10 * self.ui.doubleSpinBox_posy_min.value())
+
+        if self.ui.doubleSpinBox_force_max.value() >= self.ui.doubleSpinBox_force_min.value():
+            self.ui.progressBar_force.setRange(10 * self.ui.doubleSpinBox_force_min.value(), 10 * self.ui.doubleSpinBox_force_max.value())
+        else:
+            self.ui.progressBar_force.setRange(10 * self.ui.doubleSpinBox_force_max.value(), 10 * self.ui.doubleSpinBox_force_min.value())
+
+        if self.ui.doubleSpinBox_vecx_max.value() >= self.ui.doubleSpinBox_vecx_min.value():
+            self.ui.progressBar_vecx.setRange(10 * self.ui.doubleSpinBox_vecx_min.value(), 10 * self.ui.doubleSpinBox_vecx_max.value())
+        else:
+            self.ui.progressBar_vecx.setRange(10 * self.ui.doubleSpinBox_vecx_max.value(), 10 * self.ui.doubleSpinBox_vecx_min.value())
+
+        if self.ui.doubleSpinBox_vecy_max.value() >= self.ui.doubleSpinBox_vecy_min.value():
+            self.ui.progressBar_vecy.setRange(10 * self.ui.doubleSpinBox_vecy_min.value(), 10 * self.ui.doubleSpinBox_vecy_max.value())
+        else:
+            self.ui.progressBar_vecy.setRange(10 * self.ui.doubleSpinBox_vecy_max.value(), 10 * self.ui.doubleSpinBox_vecy_min.value())
 
     def initProgressBar(self):
         # Change corresponding progress bar range
-        self.ui.progressBar_posx.setRange(self.ui.doubleSpinBox_posx_min.value(), self.ui.doubleSpinBox_posx_max.value())
-        self.ui.progressBar_posy.setRange(self.ui.doubleSpinBox_posy_min.value(), self.ui.doubleSpinBox_posy_max.value())
-        self.ui.progressBar_force.setRange(self.ui.doubleSpinBox_force_min.value(), self.ui.doubleSpinBox_force_max.value())
-        self.ui.progressBar_vecx.setRange(self.ui.doubleSpinBox_vecx_min.value(), self.ui.doubleSpinBox_vecx_max.value())
-        self.ui.progressBar_vecy.setRange(self.ui.doubleSpinBox_vecy_min.value(), self.ui.doubleSpinBox_vecy_max.value())
+        self.ui.progressBar_posx.setRange(10 * self.ui.doubleSpinBox_posx_min.value(), 10 * self.ui.doubleSpinBox_posx_max.value())
+        self.ui.progressBar_posy.setRange(10 * self.ui.doubleSpinBox_posy_min.value(), 10 * self.ui.doubleSpinBox_posy_max.value())
+        self.ui.progressBar_force.setRange(10 * self.ui.doubleSpinBox_force_min.value(), 10 * self.ui.doubleSpinBox_force_max.value())
+        self.ui.progressBar_vecx.setRange(10 * self.ui.doubleSpinBox_vecx_min.value(), 10 * self.ui.doubleSpinBox_vecx_max.value())
+        self.ui.progressBar_vecy.setRange(10 * self.ui.doubleSpinBox_vecy_min.value(), 10 * self.ui.doubleSpinBox_vecy_max.value())
+
+    def closeEvent(self, event):
+        print('Quitting application')
+        sc.close_sensel(self.handle, self.frame)
+        sys.exit()
 
 
 if __name__ == '__main__':
-    app = QtGui.QApplication(sys.argv)
-    window = ForceStamp()
-    window.show()
-    app.exec_()
-    print('Closed the window')
-    sc.close_sensel(window.handle, window.frame)
-    sys.exit()
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        app = QtGui.QApplication(sys.argv)
+        window = ForceStamp()
+        window.show()
+        sys.exit(app.exec_())
