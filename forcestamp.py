@@ -397,6 +397,11 @@ def calculateForceVector(img):
             vecRad = np.arctan2(i - centerP, j - centerP)
             vecX += img[i, j] * vecMag * np.sin(vecRad)
             vecY += img[i, j] * vecMag * np.cos(vecRad)
+
+    # normalize vector
+    norm = np.sqrt(vecX ** 2 + vecY ** 2)
+    vecX = vecX / norm
+    vecY = vecY / norm
     return (vecX, vecY)[::-1]
 
 
@@ -423,12 +428,6 @@ class marker:
         self.ID = recognizeID(
             bch.bchDecode15_7(self.code)
         )
-
-        # self.absRot = calculateAbsoluteRotation(
-        #     self.ID,
-        #     self.code,
-        #     self.phaseError
-        # )
 
     def vectorForce(self):
         return calculateForceVector(self.markerImg)

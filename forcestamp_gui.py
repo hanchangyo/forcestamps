@@ -29,6 +29,7 @@ from forcestamp_ui import Ui_MainWindow
 class MarkerPopupWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super(MarkerPopupWidget, self).__init__(parent)
+        self.parent = parent
 
         # make the window frameless
         self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
@@ -37,44 +38,111 @@ class MarkerPopupWidget(QtWidgets.QWidget):
         self.fillColor = QtGui.QColor(30, 30, 30, 120)
         self.penColor = QtGui.QColor("#333333")
 
-        self.popup_fillColor = QtGui.QColor(240, 240, 240, 255)
+        self.popup_fillColor = QtGui.QColor(240, 240, 240, 120)
         self.popup_penColor = QtGui.QColor(200, 200, 200, 255)
 
+        self.marker_fillColor = QtGui.QColor(240, 240, 240, 120)
+
+        self.rotation_fillColor = QtGui.QColor(240, 10, 10)
+
+        self.vector_fillColor = QtGui.QColor(255, 240, 40)
+
+        self.radius = 25 * 5
+        # print(self.parent.markers)
+
+    # def resizeEvent(self, event):
+    #     s = self.size()
+    #     popup_width = 300
+    #     popup_height = 120
+    #     ow = int(s.width() / 2 - popup_width / 2)
+    #     oh = int(s.height() / 2 - popup_height / 2)
+    #     self.close_btn.move(ow + 265, oh + 5)
+    def makeTriangle(self, centerx, centery, r, theta, dr=15, phi=0.1):
+        # p1: outer point
+        # p2, p2: inner points
+        triangle = QtGui.QPolygonF()
+        # dr = 15
+        # phi = 0.1
+
+        p1x = centerx + r * np.cos(theta)
+        p1y = centery + r * np.sin(theta)
+        p1 = QtCore.QPointF(p1x, p1y)
+
+        p2x = centerx + (r - dr) * np.cos(theta - phi)
+        p2y = centery + (r - dr) * np.sin(theta - phi)
+        p3x = centerx + (r - dr) * np.cos(theta + phi)
+        p3y = centery + (r - dr) * np.sin(theta + phi)
+
+        p2 = QtCore.QPointF(p2x, p2y)
+        p3 = QtCore.QPointF(p3x, p3y)
+
+        triangle.append(p1)
+        triangle.append(p2)
+        triangle.append(p3)
+
+        return triangle
+
     def paintEvent(self, event):
-        # get current window size
-        s = self.size()
-        qp = QtGui.QPainter()
-        qp.begin(self)
+        for mkr in self.parent.markers:
+            # get current window size
+            s = self.size()
 
-        # Draw background
-        qp.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        qp.setPen(self.penColor)
-        qp.setBrush(self.fillColor)
-        qp.drawRect(0, 0, s.width(), s.height())
+            # make painter object
+            qp = QtGui.QPainter()
 
-        # Draw popup
-        qp.setPen(self.popup_penColor)
-        qp.setBrush(self.popup_fillColor)
-        popup_width = 300
-        popup_height = 120
-        ow = int(s.width() / 2 - popup_width / 2)
-        oh = int(s.height() / 2 - popup_height / 2)
-        qp.drawRoundedRect(ow, oh, popup_width, popup_height, 5, 5)
-        # qp.drawRoundedRect(500, 600, popup_width, popup_height, 5, 5)
+            # start paint event
+            qp.begin(self)
 
-        font = QtGui.QFont()
-        font.setPixelSize(18)
-        font.setBold(True)
-        qp.setFont(font)
-        qp.setPen(QtGui.QColor(255, 255, 255))
-        tolw, tolh = 80, -5
-        qp.drawText(ow + int(popup_width / 2) - tolw, oh + int(popup_height / 2) - tolh, "Yep, I'm a pop up.")
+            # # Draw background
+            # qp.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            # qp.setPen(self.penColor)
+            # qp.setBrush(self.fillColor)
+            # qp.drawRect(0, 0, s.width(), s.height())
 
-        qp.end()
+            # Draw marker
+            qp.setPen(QtCore.Qt.NoPen)
+            # marker_fillColor = QtGui.QColor(240, 240, 240, forcestamp.constraint(int(mkr.force / 50), 0, 255))
+            marker_fillColor = QtGui.QColor(240, 240, 240, 150)
+            qp.setBrush(marker_fillColor)
+            # radius = 25 * 5
+            centerx = mkr.posX * 5
+            centery = (104 - mkr.posY) * 5
+            center = QtCore.QPoint(centerx, centery)
+            qp.drawEllipse(center, self.radius, self.radius)
 
-    def _onclose(self):
-        print("Close")
-        self.SIGNALS.CLOSE.emit()
+            # Draw rotation
+            qp.setBrush(self.rotation_fillColor)
+            qp.drawPolygon(self.makeTriangle(centerx, centery, self.radius, mkr.rot))
+
+            # Draw force vector
+            # qp.setPen(self.vector_fillColor)
+            qp.setPen(QtGui.QPen(self.vector_fillColor, 7, QtCore.Qt.SolidLine))
+            qp.setBrush(self.vector_fillColor)
+            vec_len = mkr.force / 200
+            qp.drawLine(centerx, centery, centerx + vec_len * mkr.vecX, centery - vec_len * mkr.vecY)
+            qp.setPen(QtCore.Qt.NoPen)
+            qp.drawEllipse(center, 7, 7)
+            # qp.drawPolygon(self.makeTriangle(centerx, centery, vec_len, -mkr.vecY / mkr.vecX, 15, 0.3))
+
+            # Draw popup
+            # qp.setPen(self.popup_penColor)
+            # qp.setBrush(self.popup_fillColor)
+            # popup_width = self.radius * 1.8
+            # popup_height = 120
+            # ow = int(centerx - self.radius * 0.9)
+            # oh = int(centery)
+            # qp.drawRoundedRect(ow, oh, popup_width, popup_height, 5, 5)
+            # # qp.drawRoundedRect(500, 600, popup_width, popup_height, 5, 5)
+
+            font = QtGui.QFont()
+            font.setPixelSize(36)
+            font.setBold(False)
+            qp.setFont(font)
+            qp.setPen(QtGui.QColor(0, 0, 0))
+            text = 'ID: ' + str(mkr.ID)
+            qp.drawText(centerx - 35, centery - 20, text)
+
+            qp.end()
 
 
 class IDparameter:
@@ -185,9 +253,11 @@ class ForceStamp (QtWidgets.QWidget):
             # print('markerX: ' + str(self.markers[0].posX))
             # print('markerY: ' + str(self.markers[0].posY))
             # print('markerCode: ' + str(self.markers[0].code))
+            self.markers[i].force = self.markers[i].sumForce()
+            (self.markers[i].vecX, self.markers[i].vecY) = self.markers[i].vectorForce()
+            self.markers[i].rot = self.markers[i].calculateAbsoluteRotation()
 
         if len(self.markers) > 0:
-            print('open marker information')
             # print('markerID: ' + str(self.markers[0].ID))
             # print('markerForce: ' + str(self.markers[0].sumForce()))
             # print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
@@ -227,12 +297,14 @@ class ForceStamp (QtWidgets.QWidget):
 
     def resizeEvent(self, event):
         if self._popflag:
-            self._popframe.move(100, 100)
-            self._popframe.resize(300, 200)
+            self._popframe.move(0, 0)
+            self._popframe.resize(self.width(), self.height())
 
     def onPopup(self):
         self._popframe = MarkerPopupWidget(self)
-        # self._popframe.move(10, 10)
+        self._popframe.move(10, 10)
+        # print(self.ui.graphicsView.width(), self.ui.graphicsView.height())
+        self._popframe.resize(self.ui.graphicsView.width(), self.ui.graphicsView.height())
         self._popflag = True
         self._popframe.show()
 
@@ -247,15 +319,15 @@ class ForceStamp (QtWidgets.QWidget):
         posy_max = 105 - 30
         force_min = 0
         force_max = 10000
-        vecx_min = -30000
-        vecx_max = 30000
-        vecy_min = -30000
-        vecy_max = 30000
+        vecx_min = -1
+        vecx_max = 1
+        vecy_min = -1
+        vecy_max = 1
 
         for mkr in self.markers:
-            mkr.posY = 105 - mkr.posY
-            mkr.force = mkr.sumForce()
-            (mkr.vecX, mkr.vecY) = mkr.vectorForce()
+            mkr.posY = 104 - mkr.posY
+            # mkr.force = mkr.sumForce()
+            # (mkr.vecX, mkr.vecY) = mkr.vectorForce()
             mkr.vecY *= -1
             mkr.posX_scaled = (self.IDparam[mkr.ID].posx_max - self.IDparam[mkr.ID].posx_min) * ((forcestamp.constraint(mkr.posX, posx_min, posx_max) - posx_min) / (posx_max - posx_min)) + self.IDparam[mkr.ID].posx_min
             mkr.posY_scaled = (self.IDparam[mkr.ID].posy_max - self.IDparam[mkr.ID].posy_min) * ((forcestamp.constraint(mkr.posY, posy_min, posy_max) - posy_min) / (posy_max - posy_min)) + self.IDparam[mkr.ID].posy_min
@@ -349,7 +421,7 @@ class ForceStamp (QtWidgets.QWidget):
             self.currentID = 0
         else:
             self.currentID = int(text)
-        print(self.currentID)
+        # print(self.currentID)
         # print(self.IDparam[self.currentID].printParameters())
 
         # load ID parameters and apply to current controls
