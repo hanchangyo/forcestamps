@@ -15,8 +15,8 @@ from pythonosc import udp_client
 import argparse
 from copy import deepcopy
 
-from pyqtgraph.Qt import QtCore, QtGui
-from PyQt5 import QtWidgets
+# from pyqtgraph.Qt import QtCore, QtGui
+from PyQt5 import QtCore, QtGui, QtWidgets
 import pyqtgraph as pg
 from pyqtgraph.ptime import time
 
@@ -24,6 +24,57 @@ import sensel_control as sc
 import forcestamp
 
 from forcestamp_ui import Ui_MainWindow
+
+
+class MarkerPopupWidget(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super(MarkerPopupWidget, self).__init__(parent)
+
+        # make the window frameless
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+
+        self.fillColor = QtGui.QColor(30, 30, 30, 120)
+        self.penColor = QtGui.QColor("#333333")
+
+        self.popup_fillColor = QtGui.QColor(240, 240, 240, 255)
+        self.popup_penColor = QtGui.QColor(200, 200, 200, 255)
+
+    def paintEvent(self, event):
+        # get current window size
+        s = self.size()
+        qp = QtGui.QPainter()
+        qp.begin(self)
+
+        # Draw background
+        qp.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        qp.setPen(self.penColor)
+        qp.setBrush(self.fillColor)
+        qp.drawRect(0, 0, s.width(), s.height())
+
+        # Draw popup
+        qp.setPen(self.popup_penColor)
+        qp.setBrush(self.popup_fillColor)
+        popup_width = 300
+        popup_height = 120
+        ow = int(s.width() / 2 - popup_width / 2)
+        oh = int(s.height() / 2 - popup_height / 2)
+        qp.drawRoundedRect(ow, oh, popup_width, popup_height, 5, 5)
+        # qp.drawRoundedRect(500, 600, popup_width, popup_height, 5, 5)
+
+        font = QtGui.QFont()
+        font.setPixelSize(18)
+        font.setBold(True)
+        qp.setFont(font)
+        qp.setPen(QtGui.QColor(255, 255, 255))
+        tolw, tolh = 80, -5
+        qp.drawText(ow + int(popup_width / 2) - tolw, oh + int(popup_height / 2) - tolh, "Yep, I'm a pop up.")
+
+        qp.end()
+
+    def _onclose(self):
+        print("Close")
+        self.SIGNALS.CLOSE.emit()
 
 
 class IDparameter:
@@ -41,6 +92,12 @@ class IDparameter:
 
     def printParameters(self):
         print(self.posx_max, self.posx_min, self.posy_max, self.posy_min, self.force_max, self.force_min, self.vecx_max, self.vecx_min, self.vecy_max, self.vecy_min)
+
+
+class MarkerPopupSignals(QtCore.QObject):
+    # SIGNALS
+    OPEN = QtCore.pyqtSignal()
+    CLOSE = QtCore.pyqtSignal()
 
 
 class ForceStamp (QtWidgets.QWidget):
@@ -74,7 +131,7 @@ class ForceStamp (QtWidgets.QWidget):
         # initialize force image
         self.initViewBox()
 
-        # Open Morph
+        # # Open Morph
         self.handle, self.info = sc.open_sensel()
         # Initalize frame
         self.frame = sc.init_frame(self.handle)
@@ -87,15 +144,22 @@ class ForceStamp (QtWidgets.QWidget):
 
         # update using timer
         self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.update)
+        self.timer.timeout.connect(self.updateData)
         self.timer.start(self.interval)
+
+        # marker information popup
+        self._popframe = None
+        self._popflag = False
+        self.SIGNALS = MarkerPopupSignals()
+        self.SIGNALS.OPEN.connect(self.onPopup)
+        self.SIGNALS.CLOSE.connect(self.closePopup)
 
         # TODO
         # draw vector representation of markers
         # display tooltip on marker position
         # make the progress bar more fancy
 
-    def update(self):
+    def updateData(self):
         # scan image from the device
         try:
             self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
@@ -122,10 +186,17 @@ class ForceStamp (QtWidgets.QWidget):
             # print('markerY: ' + str(self.markers[0].posY))
             # print('markerCode: ' + str(self.markers[0].code))
 
-        # if len(self.markers) > 0:
+        if len(self.markers) > 0:
+            print('open marker information')
             # print('markerID: ' + str(self.markers[0].ID))
             # print('markerForce: ' + str(self.markers[0].sumForce()))
             # print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
+            if not self._popflag:
+                self.SIGNALS.OPEN.emit()
+
+        else:
+            if self._popflag:
+                self.SIGNALS.CLOSE.emit()
 
         # send marker parameters to GUI
         self.sendMarkerParameters()
@@ -153,6 +224,21 @@ class ForceStamp (QtWidgets.QWidget):
 
         # self.calculateFPS()
         QtGui.QApplication.processEvents()
+
+    def resizeEvent(self, event):
+        if self._popflag:
+            self._popframe.move(100, 100)
+            self._popframe.resize(300, 200)
+
+    def onPopup(self):
+        self._popframe = MarkerPopupWidget(self)
+        # self._popframe.move(10, 10)
+        self._popflag = True
+        self._popframe.show()
+
+    def closePopup(self):
+        self._popframe.close()
+        self._popflag = False
 
     def sendMarkerParameters(self):
         posx_min = 30
@@ -243,6 +329,7 @@ class ForceStamp (QtWidgets.QWidget):
 
         # event on value change
         self.ui.comboBox.activated[str].connect(self.onComboBoxActivated)
+        # self.ui.comboBox.activated[str].connect(self.onPopup)
 
     def onComboBoxActivated(self, text):
         # save current parameters
@@ -283,9 +370,9 @@ class ForceStamp (QtWidgets.QWidget):
                     eval('self.ui.doubleSpinBox_' + name + '.setValue(0)')
             eval('self.ui.doubleSpinBox_' + name + '.setDecimals(1)')
             eval('self.ui.doubleSpinBox_' + name + '.setKeyboardTracking(False)')
-            eval('self.ui.doubleSpinBox_' + name + '.valueChanged.connect(self.spinBoxChanged)')
+            eval('self.ui.doubleSpinBox_' + name + '.valueChanged.connect(self.onSpinBoxChanged)')
 
-    def spinBoxChanged(self, value):
+    def onSpinBoxChanged(self, value):
         # sender is the latest signal
         sender = self.sender()
         name = sender.objectName()
