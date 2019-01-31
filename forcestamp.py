@@ -3,6 +3,7 @@ from scipy.ndimage.filters import maximum_filter, minimum_filter
 import itertools
 import bch
 import ellipses
+import forcestamp_c
 
 
 def findLocalPeaks(img, threshold=0.5, kernal=3):
@@ -86,66 +87,70 @@ def findMarker(img, markerRadius=20, distanceTolerance=1):
             if isDotIncluded(circleCenter2):
                 circleCenters.append(circleCenter2)
     # print(len(circleCenters))
+    print(circleCenters)
+    print(peaks)
 
-    # find marker center candidates by given radius
-    markerCenters = []
-    for cnt in circleCenters:
-        distanceCount = 0
-        inboundPeakCount = 0
-        for peak in peaks:
-            if distance(cnt, peak) < markerRadius + distanceTolerance and \
-               distance(cnt, peak) > markerRadius - distanceTolerance:
-                distanceCount += 1
-            if distance(cnt, peak) < markerRadius - distanceTolerance:
-                inboundPeakCount += 1
-        # if there are less than 3 dots on the circle
-        # and less than 3 dots inside the circle
-        if distanceCount > 4 and inboundPeakCount < 4:
-            markerCenters.append(cnt)
+    # # find marker center candidates by given radius
+    # markerCenters = []
+    # for cnt in circleCenters:
+    #     distanceCount = 0
+    #     inboundPeakCount = 0
+    #     for peak in peaks:
+    #         if distance(cnt, peak) < markerRadius + distanceTolerance and \
+    #            distance(cnt, peak) > markerRadius - distanceTolerance:
+    #             distanceCount += 1
+    #         if distance(cnt, peak) < markerRadius - distanceTolerance:
+    #             inboundPeakCount += 1
+    #     # if there are less than 3 dots on the circle
+    #     # and less than 3 dots inside the circle
+    #     if distanceCount > 4 and inboundPeakCount < 4:
+    #         markerCenters.append(cnt)
 
-    # cluster and average marker center candidates to find accurate centers
-    markerCentersClustered = []
-    numCluster = 0
-    for cnt in markerCenters:
-        # for first marker, just add a new cluster
-        if numCluster == 0:
-            markerCentersClustered.append([cnt])
-            numCluster += 1
-        else:
-            currentCluster = 0
-            isNew = True
-            minDist = 1000
-            for i in range(len(markerCentersClustered)):
-                # check distance from existing cluster centers
-                dist = distance(cnt, markerCentersClustered[i][0])
-                minDist = np.minimum(minDist, dist)
-                if dist < markerRadius / 2:
-                    # add the center point to current cluster
-                    isNew = False
-                    currentCluster = i
-                    break
-            if isNew:
-                # if the point does not belong to any existing clusters
-                if minDist > markerRadius * 2.1:  # do not overlap with others
-                    numCluster += 1
-                    markerCentersClustered.append([])
-                    markerCentersClustered[numCluster - 1].append(cnt)
-            else:
-                markerCentersClustered[currentCluster].append(cnt)
+    # # cluster and average marker center candidates to find accurate centers
+    # markerCentersClustered = []
+    # numCluster = 0
+    # for cnt in markerCenters:
+    #     # for first marker, just add a new cluster
+    #     if numCluster == 0:
+    #         markerCentersClustered.append([cnt])
+    #         numCluster += 1
+    #     else:
+    #         currentCluster = 0
+    #         isNew = True
+    #         minDist = 1000
+    #         for i in range(len(markerCentersClustered)):
+    #             # check distance from existing cluster centers
+    #             dist = distance(cnt, markerCentersClustered[i][0])
+    #             minDist = np.minimum(minDist, dist)
+    #             if dist < markerRadius / 2:
+    #                 # add the center point to current cluster
+    #                 isNew = False
+    #                 currentCluster = i
+    #                 break
+    #         if isNew:
+    #             # if the point does not belong to any existing clusters
+    #             if minDist > markerRadius * 2.1:  # do not overlap with others
+    #                 numCluster += 1
+    #                 markerCentersClustered.append([])
+    #                 markerCentersClustered[numCluster - 1].append(cnt)
+    #         else:
+    #             markerCentersClustered[currentCluster].append(cnt)
 
-    # average marker center candidates to get accurate centers
-    markerCentersFiltered = []
-    for cluster in markerCentersClustered:
-        averageCoordX = 0
-        averageCoordY = 0
-        for coord in cluster:
-            averageCoordX += coord[0]
-            averageCoordY += coord[1]
-        averageCoordX /= len(cluster)
-        averageCoordY /= len(cluster)
-        markerCentersFiltered.append((averageCoordX, averageCoordY))
+    # # average marker center candidates to get accurate centers
+    # markerCentersFiltered = []
+    # for cluster in markerCentersClustered:
+    #     averageCoordX = 0
+    #     averageCoordY = 0
+    #     for coord in cluster:
+    #         averageCoordX += coord[0]
+    #         averageCoordY += coord[1]
+    #     averageCoordX /= len(cluster)
+    #     averageCoordY /= len(cluster)
+    #     markerCentersFiltered.append((averageCoordX, averageCoordY))
 
-    return markerCentersFiltered, markerCenters
+    markerCentersFiltered = forcestamp_c.findMarkerCenters(circleCenters, peaks, markerRadius, distanceTolerance)
+
+    return markerCentersFiltered
 
 
 def constraint(input, const_floor, const_ceil):
@@ -212,6 +217,8 @@ def extractCode(img, markerRadius, distTolerance=3):
         lsqe.fit(data)
         center, width, height, phi = lsqe.parameters()
     except(IndexError):
+        center = markerCenter
+    except(np.linalg.linalg.LinAlgError):
         center = markerCenter
     # print('circle center: ', tuple(center))
 
@@ -391,18 +398,19 @@ def calculateForceVector(img):
 
     vecX = 0
     vecY = 0
-    for i in range(width):
-        for j in range(height):
-            vecMag = distance((i, j), (centerP, centerP))
-            vecRad = np.arctan2(i - centerP, j - centerP)
-            vecX += img[i, j] * vecMag * np.sin(vecRad)
-            vecY += img[i, j] * vecMag * np.cos(vecRad)
 
-    # normalize vector
-    norm = np.sqrt(vecX ** 2 + vecY ** 2)
-    vecX = vecX / norm
-    vecY = vecY / norm
-    return (vecX, vecY)[::-1]
+    x = np.linspace(0, width - 1, width)
+    y = np.linspace(0, height - 1, height)
+
+    xv, yv = np.meshgrid(x, y)
+
+    vecMag = np.sqrt(np.power(xv - centerP, 2) + np.power(xv - centerP, 2))
+    vecRad = np.arctan2(xv - centerP, yv - centerP)
+    vecX = np.sum(img * vecMag * np.sin(vecRad))
+    vecY = np.sum(img * vecMag * np.cos(vecRad))
+    # print(vecX, vecY)
+
+    return (vecX, vecY)
 
 
 class marker:

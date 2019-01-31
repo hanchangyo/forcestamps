@@ -50,13 +50,6 @@ class MarkerPopupWidget(QtWidgets.QWidget):
         self.radius = 25 * 5
         # print(self.parent.markers)
 
-    # def resizeEvent(self, event):
-    #     s = self.size()
-    #     popup_width = 300
-    #     popup_height = 120
-    #     ow = int(s.width() / 2 - popup_width / 2)
-    #     oh = int(s.height() / 2 - popup_height / 2)
-    #     self.close_btn.move(ow + 265, oh + 5)
     def makeTriangle(self, centerx, centery, r, theta, dr=15, phi=0.1):
         # p1: outer point
         # p2, p2: inner points
@@ -84,8 +77,8 @@ class MarkerPopupWidget(QtWidgets.QWidget):
 
     def paintEvent(self, event):
         for mkr in self.parent.markers:
-            # get current window size
-            s = self.size()
+            # # get current window size
+            # s = self.size()
 
             # make painter object
             qp = QtGui.QPainter()
@@ -109,6 +102,9 @@ class MarkerPopupWidget(QtWidgets.QWidget):
             centery = (104 - mkr.posY) * 5
             center = QtCore.QPoint(centerx, centery)
             qp.drawEllipse(center, self.radius, self.radius)
+            qp.drawEllipse(center, forcestamp.constraint(self.radius * mkr.force / 10000, 0, self.radius),
+                           forcestamp.constraint(self.radius * mkr.force / 10000, 0, self.radius)
+                           )
 
             # Draw rotation
             qp.setBrush(self.rotation_fillColor)
@@ -118,21 +114,13 @@ class MarkerPopupWidget(QtWidgets.QWidget):
             # qp.setPen(self.vector_fillColor)
             qp.setPen(QtGui.QPen(self.vector_fillColor, 7, QtCore.Qt.SolidLine))
             qp.setBrush(self.vector_fillColor)
-            vec_len = mkr.force / 200
-            qp.drawLine(centerx, centery, centerx + vec_len * mkr.vecX, centery - vec_len * mkr.vecY)
+            # vec_len = mkr.force / 200
+            vecX = mkr.vecX / 1000
+            vecY = mkr.vecY / 1000
+            qp.drawLine(centerx, centery, centerx + vecX, centery - vecY)
             qp.setPen(QtCore.Qt.NoPen)
             qp.drawEllipse(center, 7, 7)
             # qp.drawPolygon(self.makeTriangle(centerx, centery, vec_len, -mkr.vecY / mkr.vecX, 15, 0.3))
-
-            # Draw popup
-            # qp.setPen(self.popup_penColor)
-            # qp.setBrush(self.popup_fillColor)
-            # popup_width = self.radius * 1.8
-            # popup_height = 120
-            # ow = int(centerx - self.radius * 0.9)
-            # oh = int(centery)
-            # qp.drawRoundedRect(ow, oh, popup_width, popup_height, 5, 5)
-            # # qp.drawRoundedRect(500, 600, popup_width, popup_height, 5, 5)
 
             font = QtGui.QFont()
             font.setPixelSize(36)
@@ -204,6 +192,9 @@ class ForceStamp (QtWidgets.QWidget):
         # Initalize frame
         self.frame = sc.init_frame(self.handle)
 
+        # Setup OSC server
+        self.setupOSC()
+
         # update interval
         self.interval = 0  # miliseconds
 
@@ -222,11 +213,6 @@ class ForceStamp (QtWidgets.QWidget):
         self.SIGNALS.OPEN.connect(self.onPopup)
         self.SIGNALS.CLOSE.connect(self.closePopup)
 
-        # TODO
-        # draw vector representation of markers
-        # display tooltip on marker position
-        # make the progress bar more fancy
-
     def updateData(self):
         # scan image from the device
         try:
@@ -244,6 +230,7 @@ class ForceStamp (QtWidgets.QWidget):
 
         # find marker objects
         markerCenters, markerCenters_raw = forcestamp.findMarker(self.f_image_peaks, self.markerRadius)
+        # forcestamp.findMarker(self.f_image_peaks, self.markerRadius)
 
         # retrieve marker parameters from marker coordinates
         self.markers = []
@@ -316,13 +303,13 @@ class ForceStamp (QtWidgets.QWidget):
         posx_min = 30
         posx_max = 184 - 30
         posy_min = 30
-        posy_max = 105 - 30
+        posy_max = 104 - 30
         force_min = 0
         force_max = 10000
-        vecx_min = -1
-        vecx_max = 1
-        vecy_min = -1
-        vecy_max = 1
+        vecx_min = -30000
+        vecx_max = 30000
+        vecy_min = -30000
+        vecy_max = 30000
 
         for mkr in self.markers:
             mkr.posY = 104 - mkr.posY
@@ -334,6 +321,16 @@ class ForceStamp (QtWidgets.QWidget):
             mkr.force_scaled = (self.IDparam[mkr.ID].force_max - self.IDparam[mkr.ID].force_min) * ((forcestamp.constraint(mkr.force, force_min, force_max) - force_min) / (force_max - force_min)) + self.IDparam[mkr.ID].force_min
             mkr.vecX_scaled = (self.IDparam[mkr.ID].vecx_max - self.IDparam[mkr.ID].vecx_min) * ((forcestamp.constraint(mkr.vecX, vecx_min, vecx_max) - vecx_min) / (vecx_max - vecx_min)) + self.IDparam[mkr.ID].vecx_min
             mkr.vecY_scaled = (self.IDparam[mkr.ID].vecy_max - self.IDparam[mkr.ID].vecy_min) * ((forcestamp.constraint(mkr.vecY, vecy_min, vecy_max) - vecy_min) / (vecy_max - vecy_min)) + self.IDparam[mkr.ID].vecy_min
+
+            # send osc data
+            self.sendOSC(mkr.posX_scaled, '/m' + str(mkr.ID) + '/posx')
+            self.sendOSC(mkr.posY_scaled, '/m' + str(mkr.ID) + '/posy')
+            self.sendOSC(mkr.force_scaled, '/m' + str(mkr.ID) + '/force')
+            self.sendOSC(mkr.vecX_scaled, '/m' + str(mkr.ID) + '/vecx')
+            self.sendOSC(mkr.vecY_scaled, '/m' + str(mkr.ID) + '/vecy')
+            self.sendOSC(np.rad2deg(mkr.rot), '/m' + str(mkr.ID) + '/rot')
+            self.sendOSC(mkr.ID, '/m' + str(mkr.ID) + '/id')
+
             if self.currentID == mkr.ID and mkr.ID is not 0:
                 # send current parameters
                 self.ui.progressBar_posx.setValue(mkr.posX_scaled * 10)
@@ -341,6 +338,11 @@ class ForceStamp (QtWidgets.QWidget):
                 self.ui.progressBar_force.setValue(mkr.force_scaled * 10)
                 self.ui.progressBar_vecx.setValue(mkr.vecX_scaled * 10)
                 self.ui.progressBar_vecy.setValue(mkr.vecY_scaled * 10)
+                self.ui.value_posx.setText(('%.01f' % mkr.posX_scaled))
+                self.ui.value_posy.setText(('%.01f' % mkr.posY_scaled))
+                self.ui.value_force.setText(('%.01f' % mkr.force_scaled))
+                self.ui.value_vecx.setText(('%.01f' % mkr.vecX_scaled))
+                self.ui.value_vecy.setText(('%.01f' % mkr.vecY_scaled))
 
     def calculateFPS(self):
         now = time()
@@ -357,12 +359,20 @@ class ForceStamp (QtWidgets.QWidget):
 
     def setupOSC(self):
         # setup OSC server
+        ip = '127.0.0.1'
         port_num = 8002
         parser = argparse.ArgumentParser()
-        parser.add_argument("--ip", default="127.0.0.1", help="The ip of th OSC Server")
+        parser.add_argument("--ip", default=ip, help="The ip of th OSC Server")
         parser.add_argument("--port", type=int, default=port_num, help="The port the OSC server is listening on")
         args = parser.parse_args()
         self.client = udp_client.UDPClient(args.ip, args.port)
+        print('OSC server on: ' + ip + ':' + str(port_num))
+
+    def sendOSC(self, msg, address):
+        msgStruct = osc_message_builder.OscMessageBuilder(address=address)
+        msgStruct.add_arg(msg)
+        msgStruct = msgStruct.build()
+        self.client.send(msgStruct)
 
     def initViewBox(self):
         # Create random image
