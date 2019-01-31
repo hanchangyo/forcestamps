@@ -139,7 +139,7 @@ void _clusterCenters(COORD_ARRAY c_in, SEQ_COORD_ARRAY *c_out, double markerRadi
             minDist = 1000.0;
             // printf("c_out->len in else: %d\n", c_out->len);
             for (i = 0; i < c_out->len; i++) {
-                printf("i: %d\n", i);
+                // printf("i: %d\n", i);
                 // check distance from existing cluster centers
                 dist = _distance(c_in.co + cnt, (c_out->co_array + i)->co);
                 // printf("distance: %f\n", dist);
