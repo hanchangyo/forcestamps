@@ -72,9 +72,9 @@ void _findCenter(
         distanceCount = 0;
         inboundPeakCount = 0;
         for (j = 0; j < peaks.len; j++) {
-            printf("i: %d, j: %d\n", i, j);
-            printf("cnt: %f, %f, peak: %f, %f\n", (centers.co + i)->x, (centers.co + i)->y,(peaks.co + j)->x, (peaks.co + j)->y);
-            printf("distance: %f\n", _distance(centers.co + i, peaks.co + j));
+            // printf("i: %d, j: %d\n", i, j);
+            // printf("cnt: %f, %f, peak: %f, %f\n", (centers.co + i)->x, (centers.co + i)->y,(peaks.co + j)->x, (peaks.co + j)->y);
+            // printf("distance: %f\n", _distance(centers.co + i, peaks.co + j));
             if (_distance(centers.co + i, peaks.co + j) < markerRadius + distanceTolerance &&
                 _distance(centers.co + i, peaks.co + j) >= markerRadius - distanceTolerance) {
                 distanceCount++;
@@ -83,10 +83,10 @@ void _findCenter(
                 inboundPeakCount++;
             }
         }
-        printf("distance count: %d\n", distanceCount);
+        // printf("distance count: %d\n", distanceCount);
         if (distanceCount > 4 && inboundPeakCount < 4) {
-            printf("found point!\n");
-            printf("k: %d\n", k);
+            // printf("found point!\n");
+            // printf("k: %d\n", k);
             // allocate more memory to mc
             // markerCenters->co = realloc(markerCenters->co, sizeof(COORD) * (k + 1));
             COORD *tmp = realloc(markerCenters->co, sizeof(COORD) * (k + 1));
@@ -101,8 +101,8 @@ void _findCenter(
             (markerCenters->co + k)->y = (centers.co + i)->y;
             k++;
             markerCenters->len = k;
-            printf("marker centers: x: %f, y: %f\n", (centers.co + i)->x, (centers.co + i)->y);
-            printf("marker center len: %d\n", k);
+            // printf("marker centers: x: %f, y: %f\n", (centers.co + i)->x, (centers.co + i)->y);
+            // printf("marker center len: %d\n", k);
         }
     }
     // free(markerCenters->co);
@@ -114,35 +114,35 @@ void _clusterCenters(COORD_ARRAY c_in, SEQ_COORD_ARRAY *c_out, double markerRadi
     double minDist, dist;
     bool isNew;
 
-    printf("start clustering center coords\n");
-    printf("c_in->len: %d\n", c_in.len);
+    // printf("start clustering center coords\n");
+    // printf("c_in->len: %d\n", c_in.len);
     for (cnt = 0; cnt < c_in.len; cnt++) {
         if (c_out->len == 0) {
             // allocate memory
             c_out->len = 1;
             _allocateMemSeqArray(c_out);
             c_out->co_array->len = 1;
-            printf("c_out->co_array->len = %d\n", c_out->co_array->len); 
+            // printf("c_out->co_array->len = %d\n", c_out->co_array->len); 
             _allocateMemArray(c_out->co_array);
             c_out->co_array->co->x = (c_in.co + cnt)->x;
             c_out->co_array->co->y = (c_in.co + cnt)->y;
             // numCluster++;
             // c_out->len++;
-            printf("c_out->len: %d\n", c_out->len);
-            printf("c_out->co_array->co->x: %f\n", c_out->co_array->co->x);
-            printf("c_out->co_array->co->y: %f\n", c_out->co_array->co->y);
+            // printf("c_out->len: %d\n", c_out->len);
+            // printf("c_out->co_array->co->x: %f\n", c_out->co_array->co->x);
+            // printf("c_out->co_array->co->y: %f\n", c_out->co_array->co->y);
 
         }
         else {
             currentCluster = 0;
             isNew = true;
             minDist = 1000.0;
-            printf("c_out->len in else: %d\n", c_out->len);
+            // printf("c_out->len in else: %d\n", c_out->len);
             for (i = 0; i < c_out->len; i++) {
                 printf("i: %d\n", i);
                 // check distance from existing cluster centers
                 dist = _distance(c_in.co + cnt, (c_out->co_array + i)->co);
-                printf("distance: %f\n", dist);
+                // printf("distance: %f\n", dist);
                 minDist = _minimum(minDist, dist);
                 if (dist < markerRadius / 2) {
                     // add the center to current cluster
@@ -152,15 +152,15 @@ void _clusterCenters(COORD_ARRAY c_in, SEQ_COORD_ARRAY *c_out, double markerRadi
                 }
             }
             if (isNew) {
-                printf("it's new!\n");
+                // printf("it's new!\n");
                 // if the point does not belong to any existing clusters
-                printf("min Dist: %f\n", minDist);
+                // printf("min Dist: %f\n", minDist);
                 if (minDist > markerRadius * 2.1) {
                     // add new cluster
                     // numCluster++;
                     c_out->len++;
-                    printf("c_out->len: %d\n", c_out->len);
-                    printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
+                    // printf("c_out->len: %d\n", c_out->len);
+                    // printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
                     COORD_ARRAY *tmp = realloc(c_out->co_array, sizeof(COORD_ARRAY) * c_out->len);
                     if (tmp == NULL) {
                         printf("memory allocation error");
@@ -169,21 +169,21 @@ void _clusterCenters(COORD_ARRAY c_in, SEQ_COORD_ARRAY *c_out, double markerRadi
                     } else {
                         c_out->co_array = tmp;
                     }
-                    printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
+                    // printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
                     (c_out->co_array + c_out->len - 1)->len = 1;
                     _allocateMemArray(c_out->co_array + c_out->len - 1);
                     (c_out->co_array + c_out->len - 1)->co->x = (c_in.co + cnt)->x;
                     (c_out->co_array + c_out->len - 1)->co->y = (c_in.co + cnt)->y;
-                    printf("cluster %d\n", c_out->len - 1);
-                    printf("(c_out->co_array + c_out->len - 1)->co->x: %f\n", (c_out->co_array + c_out->len - 1)->co->x);
-                    printf("(c_out->co_array + c_out->len - 1)->co->y: %f\n", (c_out->co_array + c_out->len - 1)->co->y);
+                    // printf("cluster %d\n", c_out->len - 1);
+                    // printf("(c_out->co_array + c_out->len - 1)->co->x: %f\n", (c_out->co_array + c_out->len - 1)->co->x);
+                    // printf("(c_out->co_array + c_out->len - 1)->co->y: %f\n", (c_out->co_array + c_out->len - 1)->co->y);
                 }
             } else {
                 // append to current cluster
-                printf("append to current cluster %d\n", currentCluster);
-                printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
+                // printf("append to current cluster %d\n", currentCluster);
+                // printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
                 (c_out->co_array + currentCluster)->len++;
-                printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
+                // printf("(c_out->co_array + currentCluster)->len: %d\n", (c_out->co_array + currentCluster)->len);
                 COORD *tmp = realloc((c_out->co_array + currentCluster)->co, sizeof(COORD) * (c_out->co_array + currentCluster)->len);
                 if (tmp == NULL) {
                     printf("memory allocation error");
@@ -195,7 +195,7 @@ void _clusterCenters(COORD_ARRAY c_in, SEQ_COORD_ARRAY *c_out, double markerRadi
 
                 ((c_out->co_array + currentCluster)->co + (c_out->co_array + currentCluster)->len - 1)->x = (c_in.co + cnt)->x;
                 ((c_out->co_array + currentCluster)->co + (c_out->co_array + currentCluster)->len - 1)->y = (c_in.co + cnt)->y;
-                printf("x: %f, y: %f\n", (c_in.co + cnt)->x, (c_in.co + cnt)->y);
+                // printf("x: %f, y: %f\n", (c_in.co + cnt)->x, (c_in.co + cnt)->y);
             }
 
         }
@@ -205,10 +205,10 @@ void _clusterCenters(COORD_ARRAY c_in, SEQ_COORD_ARRAY *c_out, double markerRadi
 void _getAccurateCenters(SEQ_COORD_ARRAY c_in, COORD_ARRAY *c_out) {
     unsigned int i, j;
     double averageCoordX, averageCoordY;
-    printf("starting center coords integration\n");
-    printf("c_in.len: %d\n", c_in.len);
+    // printf("starting center coords integration\n");
+    // printf("c_in.len: %d\n", c_in.len);
     c_out->len = c_in.len;
-    printf("c_out->len: %d\n", c_out->len);
+    // printf("c_out->len: %d\n", c_out->len);
     _allocateMemArray(c_out);
     for (i = 0; i < c_in.len; i++) {
         averageCoordX = averageCoordY = 0;
@@ -219,7 +219,7 @@ void _getAccurateCenters(SEQ_COORD_ARRAY c_in, COORD_ARRAY *c_out) {
         }
         averageCoordX /= (c_in.co_array + i)->len;
         averageCoordY /= (c_in.co_array + i)->len;
-        printf("average X: %f, Y: %f\n", averageCoordX, averageCoordY);
+        // printf("average X: %f, Y: %f\n", averageCoordX, averageCoordY);
         (c_out->co + i)->x = averageCoordX;
         (c_out->co + i)->y = averageCoordY;
     }
@@ -377,14 +377,14 @@ int main() {
 
 static PyObject* findMarkerCenters(PyObject *self, PyObject *args)
 {
-    PyObject *center_list, *peak_list;
-    PyObject *tuple_item, *temp_x, *temp_y;
+    static PyObject *center_list, *peak_list;
+    static PyObject *tuple_item, *temp_x, *temp_y;
 
     unsigned int center_length, peak_length, i;
     double markerRadius, distanceTolerance;
-    COORD_ARRAY centers, peaks, mcenters_filtered;
-    COORD_ARRAY mcenters;
-    SEQ_COORD_ARRAY clustered_centers;
+    static COORD_ARRAY centers, peaks, mcenters_filtered;
+    static COORD_ARRAY mcenters;
+    static SEQ_COORD_ARRAY clustered_centers;
     mcenters.len = 0;
     clustered_centers.len = 0;
     
@@ -404,10 +404,10 @@ static PyObject* findMarkerCenters(PyObject *self, PyObject *args)
     centers.len = center_length;
     peaks.len = peak_length;
 
-    printf("centers.len: %d\n", centers.len);
-    printf("peaks.len: %d\n", peaks.len);
-    printf("markerRadius: %f\n", markerRadius);
-    printf("distanceTolerance: %f\n", distanceTolerance);
+    // printf("centers.len: %d\n", centers.len);
+    // printf("peaks.len: %d\n", peaks.len);
+    // printf("markerRadius: %f\n", markerRadius);
+    // printf("distanceTolerance: %f\n", distanceTolerance);
 
     // allocate memories
     _allocateMemArray(&centers);
@@ -423,7 +423,7 @@ static PyObject* findMarkerCenters(PyObject *self, PyObject *args)
         }
         temp_x = PyTuple_GetItem(tuple_item, 0);
         temp_y = PyTuple_GetItem(tuple_item, 1);
-        printf("coord x: %f, y: %f\n", PyFloat_AsDouble(temp_x), PyFloat_AsDouble(temp_y));
+        // printf("coord x: %f, y: %f\n", PyFloat_AsDouble(temp_x), PyFloat_AsDouble(temp_y));
         (centers.co + i)->x = PyFloat_AsDouble(temp_x);
         (centers.co + i)->y = PyFloat_AsDouble(temp_y);
     }
@@ -436,7 +436,7 @@ static PyObject* findMarkerCenters(PyObject *self, PyObject *args)
         }
         temp_x = PyTuple_GetItem(tuple_item, 0);
         temp_y = PyTuple_GetItem(tuple_item, 1);
-        printf("coord x: %f, y: %f\n", PyFloat_AsDouble(temp_x), PyFloat_AsDouble(temp_y));
+        // printf("coord x: %f, y: %f\n", PyFloat_AsDouble(temp_x), PyFloat_AsDouble(temp_y));
         (peaks.co + i)->x = PyFloat_AsDouble(temp_x);
         (peaks.co + i)->y = PyFloat_AsDouble(temp_y);
     }
@@ -454,12 +454,12 @@ static PyObject* findMarkerCenters(PyObject *self, PyObject *args)
     _getAccurateCenters(clustered_centers, &mcenters_filtered);
 
     // pack output array as list of tuples
-    printf("mcenters_filtered.len: %d\n", mcenters_filtered.len);
+    // printf("mcenters_filtered.len: %d\n", mcenters_filtered.len);
     PyObject* return_list = PyList_New(0);
     PyObject* return_item;
     for (i = 0; i < mcenters_filtered.len; i++) {
         return_item = Py_BuildValue("dd", (mcenters_filtered.co + i)->x, (mcenters_filtered.co + i)->y);
-        printf("return x: %f, y: %f\n", (mcenters_filtered.co + i)->x, (mcenters_filtered.co + i)->y);
+        // printf("return x: %f, y: %f\n", (mcenters_filtered.co + i)->x, (mcenters_filtered.co + i)->y);
         // printf("%d\n", PyList_SetItem(return_list, i, return_item));
         PyList_Append(return_list, return_item);
     }
