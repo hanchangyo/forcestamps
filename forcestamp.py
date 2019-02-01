@@ -70,7 +70,7 @@ def findPeakCoord(img):
     return peaks
 
 
-def findMarker(img, markerRadius=20, distanceTolerance=1):
+def findMarker(img, markerRadius=20, distanceTolerance=1, cMode=False):
     # find marker pin peaks from the peak image
     # distanceTolerance: tolerance when finding marker center candidates
     peaks = findPeakCoord(img)
@@ -87,68 +87,69 @@ def findMarker(img, markerRadius=20, distanceTolerance=1):
             if isDotIncluded(circleCenter2):
                 circleCenters.append(circleCenter2)
     # print(len(circleCenters))
-    print(circleCenters)
-    print(peaks)
+    # print(circleCenters)
+    # print(peaks)
 
-    # # find marker center candidates by given radius
-    # markerCenters = []
-    # for cnt in circleCenters:
-    #     distanceCount = 0
-    #     inboundPeakCount = 0
-    #     for peak in peaks:
-    #         if distance(cnt, peak) < markerRadius + distanceTolerance and \
-    #            distance(cnt, peak) > markerRadius - distanceTolerance:
-    #             distanceCount += 1
-    #         if distance(cnt, peak) < markerRadius - distanceTolerance:
-    #             inboundPeakCount += 1
-    #     # if there are less than 3 dots on the circle
-    #     # and less than 3 dots inside the circle
-    #     if distanceCount > 4 and inboundPeakCount < 4:
-    #         markerCenters.append(cnt)
+    if cMode:
+        markerCentersFiltered = forcestamp_c.findMarkerCenters(circleCenters, peaks, markerRadius, distanceTolerance)
+    else:
+        # find marker center candidates by given radius
+        markerCenters = []
+        for cnt in circleCenters:
+            distanceCount = 0
+            inboundPeakCount = 0
+            for peak in peaks:
+                if distance(cnt, peak) < markerRadius + distanceTolerance and \
+                   distance(cnt, peak) > markerRadius - distanceTolerance:
+                    distanceCount += 1
+                if distance(cnt, peak) < markerRadius - distanceTolerance:
+                    inboundPeakCount += 1
+            # if there are less than 3 dots on the circle
+            # and less than 3 dots inside the circle
+            if distanceCount > 4 and inboundPeakCount < 4:
+                markerCenters.append(cnt)
 
-    # # cluster and average marker center candidates to find accurate centers
-    # markerCentersClustered = []
-    # numCluster = 0
-    # for cnt in markerCenters:
-    #     # for first marker, just add a new cluster
-    #     if numCluster == 0:
-    #         markerCentersClustered.append([cnt])
-    #         numCluster += 1
-    #     else:
-    #         currentCluster = 0
-    #         isNew = True
-    #         minDist = 1000
-    #         for i in range(len(markerCentersClustered)):
-    #             # check distance from existing cluster centers
-    #             dist = distance(cnt, markerCentersClustered[i][0])
-    #             minDist = np.minimum(minDist, dist)
-    #             if dist < markerRadius / 2:
-    #                 # add the center point to current cluster
-    #                 isNew = False
-    #                 currentCluster = i
-    #                 break
-    #         if isNew:
-    #             # if the point does not belong to any existing clusters
-    #             if minDist > markerRadius * 2.1:  # do not overlap with others
-    #                 numCluster += 1
-    #                 markerCentersClustered.append([])
-    #                 markerCentersClustered[numCluster - 1].append(cnt)
-    #         else:
-    #             markerCentersClustered[currentCluster].append(cnt)
+        # cluster and average marker center candidates to find accurate centers
+        markerCentersClustered = []
+        numCluster = 0
+        for cnt in markerCenters:
+            # for first marker, just add a new cluster
+            if numCluster == 0:
+                markerCentersClustered.append([cnt])
+                numCluster += 1
+            else:
+                currentCluster = 0
+                isNew = True
+                minDist = 1000
+                for i in range(len(markerCentersClustered)):
+                    # check distance from existing cluster centers
+                    dist = distance(cnt, markerCentersClustered[i][0])
+                    minDist = np.minimum(minDist, dist)
+                    if dist < markerRadius / 2:
+                        # add the center point to current cluster
+                        isNew = False
+                        currentCluster = i
+                        break
+                if isNew:
+                    # if the point does not belong to any existing clusters
+                    if minDist > markerRadius * 2.1:  # do not overlap with others
+                        numCluster += 1
+                        markerCentersClustered.append([])
+                        markerCentersClustered[numCluster - 1].append(cnt)
+                else:
+                    markerCentersClustered[currentCluster].append(cnt)
 
-    # # average marker center candidates to get accurate centers
-    # markerCentersFiltered = []
-    # for cluster in markerCentersClustered:
-    #     averageCoordX = 0
-    #     averageCoordY = 0
-    #     for coord in cluster:
-    #         averageCoordX += coord[0]
-    #         averageCoordY += coord[1]
-    #     averageCoordX /= len(cluster)
-    #     averageCoordY /= len(cluster)
-    #     markerCentersFiltered.append((averageCoordX, averageCoordY))
-
-    markerCentersFiltered = forcestamp_c.findMarkerCenters(circleCenters, peaks, markerRadius, distanceTolerance)
+        # average marker center candidates to get accurate centers
+        markerCentersFiltered = []
+        for cluster in markerCentersClustered:
+            averageCoordX = 0
+            averageCoordY = 0
+            for coord in cluster:
+                averageCoordX += coord[0]
+                averageCoordY += coord[1]
+            averageCoordX /= len(cluster)
+            averageCoordY /= len(cluster)
+            markerCentersFiltered.append((averageCoordX, averageCoordY))
 
     return markerCentersFiltered
 
@@ -234,11 +235,30 @@ def extractCode(img, markerRadius, distTolerance=3):
     # 15th power to remove phase shifts
     # print(vecDots[1])
     phaseError = 0
+    phaseErrorArray = []
     for i in vecDots:
-        phaseError += i[1] % (2 * np.pi / n)
+        # i_error = i[1] % (2 * np.pi / n)
+        # if i_error < (2 * np.pi / n) / 2:
+            # i_error += (2 * np.pi / n)
+        # phaseError += i_error
+        phaseErrorArray.append(i[1] % (2 * np.pi / n))
 
-    phaseError = phaseError / len(vecDots)
-    # print('marker deg: ' + str(phaseError))
+    # unwrap phase
+    thre = 0.005
+    var = np.var(phaseErrorArray)
+    phaseErrorArray_fixed = []
+    for i in phaseErrorArray:
+        if var > thre:
+            if i < 2 * np.pi / 4 / n:
+                i += (2 * np.pi / n)
+        phaseErrorArray_fixed.append(i)
+
+    # phaseError = phaseError / len(vecDots)
+    phaseError = np.average(phaseErrorArray_fixed)
+    # print('phase error: ' + str(np.rad2deg(phaseError)))
+    # print('distribution: ', np.var(phaseErrorArray))
+    # print(phaseErrorArray)
+    # print(phaseErrorArray_fixed)
 
     # print(vecDots[0])
     vecDotsFixed = []
