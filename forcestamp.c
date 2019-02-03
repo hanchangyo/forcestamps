@@ -1,6 +1,4 @@
-// #include </Users/hanc/.pyenv/versions/3.7.1/include/python3.7m//Python.h>
-#include "C:\Users\hanc\AppData\Local\Programs\Python\Python37\include\Python.h"
-// #include <Python.h>
+#include <Python.h>
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
