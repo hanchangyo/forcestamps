@@ -70,7 +70,7 @@ def findPeakCoord(img):
     return peaks
 
 
-def findMarker(img, markerRadius=20, distanceTolerance=1, cMode=False):
+def findMarker(img, markerRadius=20, distanceTolerance=1, cMode=True):
     # find marker pin peaks from the peak image
     # distanceTolerance: tolerance when finding marker center candidates
     peaks = findPeakCoord(img)
@@ -106,6 +106,7 @@ def findMarker(img, markerRadius=20, distanceTolerance=1, cMode=False):
                     inboundPeakCount += 1
             # if there are less than 3 dots on the circle
             # and less than 3 dots inside the circle
+            # print(distanceCount)
             if distanceCount > 4 and inboundPeakCount < 4:
                 markerCenters.append(cnt)
 
@@ -228,7 +229,11 @@ def extractCode(img, markerRadius, distTolerance=3):
     for dot in trueDots:
         vec = (dot[0] - center[0], dot[1] - center[1])
         vecMag = distance((0, 0), vec)
-        vecPhs = np.arctan2(vec[1], vec[0])
+        # print(vec)
+        try:
+            vecPhs = np.arctan2(vec[1], vec[0])
+        except TypeError:
+            vecPhs = np.arctan2(np.real(vec[1]), np.real(vec[0]))
         vecDots.append((vecMag, vecPhs))
     # print(np.rad2deg(vecPhs) % (360 / 15))
 
@@ -282,7 +287,10 @@ def extractCode(img, markerRadius, distTolerance=3):
     # specify dot regions
     initX = initDot[0] - center[0]
     initY = initDot[1] - center[1]
-    initRad = np.arctan2(initX, initY)
+    try:
+        initRad = np.arctan2(initX, initY)
+    except TypeError:
+        initRad = np.arctan2(np.real(initX), np.real(initY))
     for j in range(n):
         destX = center[0] + \
             markerRadius * np.sin(initRad + j * 2 * np.pi / n)
@@ -294,7 +302,7 @@ def extractCode(img, markerRadius, distTolerance=3):
     for dot in dotRegions:
         isDot = 0
         for dotData in cartDotsFixed:
-            if distance(dot, dotData) < 4:
+            if distance(dot, dotData) < 3:
                 isDot = 1
         codes.append(isDot)
 
@@ -409,6 +417,48 @@ def cropImage(img, pos, radius, margin=4):
 
     return imgCropped
 
+def excludeMarkerPeaks(img, pos, radius, margin=2):
+    # crop image region surrounded by circle
+    # img size
+    width = np.shape(img)[0]
+    height = np.shape(img)[1]
+
+    posX = int(pos[0])
+    posY = int(pos[1])
+
+    # crop size
+    crop = (radius + margin) * 2 + 1
+    crop_half = radius + margin
+
+    # imgCropped = np.zeros((crop, crop))
+
+    xMinFixed = 0
+    xMaxFixed = crop
+    yMinFixed = 0
+    yMaxFixed = crop
+
+    xMin = posX - crop_half
+    xMax = posX + crop_half
+    yMin = posY - crop_half
+    yMax = posY + crop_half
+
+    if xMin < 0:
+        xMinFixed = -xMin
+    if xMax >= width:
+        xMaxFixed = crop + (width - xMax) - 1
+    if yMin < 0:
+        yMinFixed = -yMin
+    if yMax >= height:
+        yMaxFixed = crop + (height - yMax) - 1
+
+    pxMin = constraint(posX - crop_half, 0, width)
+    pxMax = constraint(posX + crop_half, 0, width)
+    pyMin = constraint(posY - crop_half, 0, height)
+    pyMax = constraint(posY + crop_half, 0, height)
+    # imgCropped[xMinFixed:xMaxFixed, yMinFixed:yMaxFixed] = \
+    img[pxMin:pxMax + 1, pyMin:pyMax + 1] = False
+
+    return img
 
 def calculateForceVector(img):
     # calcuate vector of the applied force
@@ -453,9 +503,97 @@ class marker:
             markerRadius
         )
 
+        self.force = self.sumForce()
+
+        self.vecX, self.vecY = self.vectorForce()
+
         self.ID = recognizeID(
             bch.bchDecode15_7(self.code)
         )
+
+        self.prevrot = self.calculateAbsoluteRotation()
+
+        if self.ID is 8 or self.ID is 10 or self.ID is 11:
+            self.rot = 0
+        else:
+            self.rot = self.calculateAbsoluteRotation()
+
+        self.lifetime = 0
+
+    def updateProperties(self, img, imgPeak, markerRadius, pos):
+        n = 15
+        self.posX = pos[1]
+        self.posY = pos[0]
+
+        self.markerImg = cropImage(img, pos, markerRadius)
+
+        self.markerImgPeak = cropImage(imgPeak, pos, markerRadius)
+
+        self.code, self.dotRegions, self.phaseError = extractCode(
+            self.markerImgPeak,
+            markerRadius
+        )
+
+        self.force = self.sumForce()
+
+        self.vecX, self.vecY = self.vectorForce()
+
+        ID = recognizeID(
+            bch.bchDecode15_7(self.code)
+        )
+
+        if ID is not self.ID:
+            if self.checkIDConfidence():
+                self.ID = ID
+                self.rot = self.calculateAbsoluteRotation()
+            # do not update rotation
+            self.rot = self.rot
+        else:
+            if self.ID is 8 or self.ID is 10 or self.ID is 11:
+                d_rot = self.prevrot - self.calculateAbsoluteRotation()
+                # print(self.prevrot)
+                self.rot = self.calculateAbsoluteRotation()
+                # print(d_rot)
+                if self.ID is 10 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
+                    self.rot -= d_rot - 2 * np.pi
+                elif self.ID is 10 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
+                    self.rot -= d_rot - 2 * np.pi * 12 / n
+                elif self.ID is 10 and d_rot < -2 * np.pi * 13 / n and d_rot > -2 * np.pi * 1.1:
+                    self.rot -= d_rot + 2 * np.pi
+                elif self.ID is 10 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
+                    self.rot -= d_rot + 2 * np.pi * 12 / n
+                elif self.ID is 8 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
+                    self.rot -= d_rot - 2 * np.pi
+                elif self.ID is 8 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
+                    self.rot -= d_rot - 2 * np.pi * 12 / n
+                elif self.ID is 8 and d_rot < -2 * np.pi * 13 / n and d_rot > -2 * np.pi * 1.1:
+                    self.rot -= d_rot + 2 * np.pi
+                elif self.ID is 8 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
+                    self.rot -= d_rot + 2 * np.pi * 12 / n
+                elif self.ID is 11 and d_rot > 2 * np.pi * 1.6 / n:
+                    self.rot -= d_rot + 2 * np.pi * 2 / n
+                elif self.ID is 11 and d_rot < -2 * np.pi * 1.6 / n:
+                    self.rot -= d_rot - 2 * np.pi * 2 / n
+                else:
+                    self.rot -= d_rot
+                self.prevrot = self.calculateAbsoluteRotation()
+            else:
+                self.rot = self.calculateAbsoluteRotation()
+
+        self.lifetime = 0
+
+    def checkIDConfidence(self):
+        # check for the marker retrieval condition
+        # print('ID change!')
+        thre_force = 3000
+        thre_vecx = thre_vecy = 12000
+        # print(self.vecX, self.vecY)
+        if self.force > thre_force and np.abs(self.vecX) < thre_vecx and np.abs(self.vecY) < thre_vecy:
+            # print('accept changed ID')
+            return True
+        else:
+            # print('maintain current ID')
+            return False
 
     def vectorForce(self):
         return calculateForceVector(self.markerImg)

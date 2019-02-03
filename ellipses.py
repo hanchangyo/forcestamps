@@ -1,6 +1,6 @@
 import numpy
 # import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
+# from matplotlib.patches import Ellipse
 
 """Demonstration of least-squares fitting of ellipses
     __author__ = "Ben Hammel, Nick Sullivan-Molina"
