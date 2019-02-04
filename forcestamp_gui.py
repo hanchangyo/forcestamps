@@ -185,9 +185,6 @@ class ForceStamp (QtWidgets.QWidget):
         # initailize ID scale parameters
         self.IDparam = [IDparameter() for count in range(12)]
 
-        # initialize sensitivity
-
-
         # initialize force image
         self.initViewBox()
 
@@ -208,9 +205,8 @@ class ForceStamp (QtWidgets.QWidget):
         self.markers = []
 
         # set marker sensitivity
-        self.force_sensitivity = 8000
-        self.vector_sensitivity = 30000
-
+        self.force_sensitivity = 3000
+        self.vector_sensitivity = 15000
 
         # store previous state
         self.prevState = [0] * 12
@@ -255,7 +251,7 @@ class ForceStamp (QtWidgets.QWidget):
         self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image, threshold=0.3)
 
         # find marker objects
-        markerCenters = forcestamp.findMarker(self.f_image_peaks, self.markerRadius, distanceTolerance=1.5, cMode=True)
+        markerCenters = forcestamp.findMarker(self.f_image_peaks, self.markerRadius, distanceTolerance=1, cMode=True)
         # forcestamp.findMarker(self.f_image_peaks, self.markerRadius)
 
         # retrieve marker parameters from marker coordinates
@@ -582,11 +578,11 @@ class ForceStamp (QtWidgets.QWidget):
             eval('self.ui.doubleSpinBox_' + name + '.valueChanged.connect(self.onSpinBoxChanged)')
 
         self.ui.doubleSpinBox_force_sens.setRange(0, 20000)
-        self.ui.doubleSpinBox_force_sens.setValue(8000)
+        self.ui.doubleSpinBox_force_sens.setValue(3000)
         self.ui.doubleSpinBox_force_sens.setDecimals(0)
         self.ui.doubleSpinBox_force_sens.valueChanged.connect(self.onSensivityChanged)
         self.ui.doubleSpinBox_vector_sens.setRange(0, 50000)
-        self.ui.doubleSpinBox_vector_sens.setValue(30000)
+        self.ui.doubleSpinBox_vector_sens.setValue(15000)
         self.ui.doubleSpinBox_vector_sens.setDecimals(0)
         self.ui.doubleSpinBox_vector_sens.valueChanged.connect(self.onSensivityChanged)
 

@@ -552,7 +552,7 @@ class marker:
             if self.ID is 8 or self.ID is 10 or self.ID is 11:
                 d_rot = self.prevrot - self.calculateAbsoluteRotation()
                 # print(self.prevrot)
-                self.rot = self.calculateAbsoluteRotation()
+                # self.rot = self.calculateAbsoluteRotation()
                 # print(d_rot)
                 if self.ID is 10 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
                     self.rot -= d_rot - 2 * np.pi
@@ -571,9 +571,9 @@ class marker:
                 elif self.ID is 8 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
                     self.rot -= d_rot + 2 * np.pi * 12 / n
                 elif self.ID is 11 and d_rot > 2 * np.pi * 1.6 / n:
-                    self.rot -= d_rot + 2 * np.pi * 2 / n
-                elif self.ID is 11 and d_rot < -2 * np.pi * 1.6 / n:
                     self.rot -= d_rot - 2 * np.pi * 2 / n
+                elif self.ID is 11 and d_rot < -2 * np.pi * 1.6 / n:
+                    self.rot -= d_rot + 2 * np.pi * 2 / n
                 else:
                     self.rot -= d_rot
                 self.prevrot = self.calculateAbsoluteRotation()
@@ -585,7 +585,7 @@ class marker:
     def checkIDConfidence(self):
         # check for the marker retrieval condition
         # print('ID change!')
-        thre_force = 3000
+        thre_force = 1500
         thre_vecx = thre_vecy = 12000
         # print(self.vecX, self.vecY)
         if self.force > thre_force and np.abs(self.vecX) < thre_vecx and np.abs(self.vecY) < thre_vecy:
