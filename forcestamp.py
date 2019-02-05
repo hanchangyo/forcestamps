@@ -553,7 +553,7 @@ class marker:
                 d_rot = self.prevrot - self.calculateAbsoluteRotation()
                 # print(self.prevrot)
                 # self.rot = self.calculateAbsoluteRotation()
-                print(d_rot)
+                # print(d_rot)
                 if self.ID is 10 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
                     self.rot -= d_rot - 2 * np.pi
                 elif self.ID is 10 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
