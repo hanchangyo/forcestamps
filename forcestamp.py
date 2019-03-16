@@ -70,10 +70,32 @@ def findPeakCoord(img):
     return peaks
 
 
-def findMarker(img, markerRadius=20, distanceTolerance=1, cMode=True):
+def findSubpixelPeaks(peaks, img):
+    # prepare an empty array of kernal size
+    n = 7
+    
+    subPeaks = []
+    for pk in peaks:
+        # crop region around peak coord with the kernal size
+        cropped = cropImage(img, pk, radius=2, margin=1)
+        # project values to x axis and y axis each
+        x = np.sum(cropped, axis=0)
+        y = np.sum(cropped, axis=1)
+
+        # perform CoM7 peak detection
+        x_CoM7 = (3 * x[6] + 2 * x[5] + x[4] - x[2] - 2 * x[1] - 3 * x[0]) / (np.sum(x))
+        y_CoM7 = (3 * y[6] + 2 * y[5] + y[4] - y[2] - 2 * y[1] - 3 * y[0]) / (np.sum(y))
+
+        # print(x_CoM7, y_CoM7)
+        subPeaks.append((pk[0] + x_CoM7, pk[1] + y_CoM7))
+
+    return subPeaks
+
+
+def findMarker(peaks, markerRadius=20, distanceTolerance=1, cMode=True):
     # find marker pin peaks from the peak image
     # distanceTolerance: tolerance when finding marker center candidates
-    peaks = findPeakCoord(img)
+    # peaks = findPeakCoord(img)
 
     circleCenters = []
     # make combination of two to find circle peaks
@@ -538,47 +560,47 @@ class marker:
 
         self.vecX, self.vecY = self.vectorForce()
 
-        ID = recognizeID(
+        self.ID = recognizeID(
             bch.bchDecode15_7(self.code)
         )
 
-        if ID is not self.ID:
-            if self.checkIDConfidence():
-                self.ID = ID
-                self.rot = self.calculateAbsoluteRotation()
-            # do not update rotation
-            self.rot = self.rot
-        else:
-            if self.ID is 8 or self.ID is 10 or self.ID is 11:
-                d_rot = self.prevrot - self.calculateAbsoluteRotation()
-                # print(self.prevrot)
-                # self.rot = self.calculateAbsoluteRotation()
-                # print(d_rot)
-                if self.ID is 10 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
-                    self.rot -= d_rot - 2 * np.pi
-                elif self.ID is 10 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
-                    self.rot -= d_rot - 2 * np.pi * 12 / n
-                elif self.ID is 10 and d_rot < -2 * np.pi * 13 / n and d_rot > -2 * np.pi * 1.1:
-                    self.rot -= d_rot + 2 * np.pi
-                elif self.ID is 10 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
-                    self.rot -= d_rot + 2 * np.pi * 12 / n
-                elif self.ID is 8 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
-                    self.rot -= d_rot - 2 * np.pi
-                elif self.ID is 8 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
-                    self.rot -= d_rot - 2 * np.pi * 12 / n
-                elif self.ID is 8 and d_rot < -2 * np.pi * 13 / n and d_rot > -2 * np.pi * 1.1:
-                    self.rot -= d_rot + 2 * np.pi
-                elif self.ID is 8 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
-                    self.rot -= d_rot + 2 * np.pi * 12 / n
-                elif self.ID is 11 and d_rot > 2 * np.pi / n * 0.8:
-                    self.rot -= d_rot - 2 * np.pi / n
-                elif self.ID is 11 and d_rot < -2 * np.pi / n * 0.8:
-                    self.rot -= d_rot + 2 * np.pi / n
-                else:
-                    self.rot -= d_rot
-                self.prevrot = self.calculateAbsoluteRotation()
+        # if ID is not self.ID:
+        #     if self.checkIDConfidence():
+        #         self.ID = ID
+        #         self.rot = self.calculateAbsoluteRotation()
+        #     # do not update rotation
+        #     self.rot = self.rot
+        # else:
+        if self.ID is 8 or self.ID is 10 or self.ID is 11:
+            d_rot = self.prevrot - self.calculateAbsoluteRotation()
+            # print(self.prevrot)
+            # self.rot = self.calculateAbsoluteRotation()
+            # print(d_rot)
+            if self.ID is 10 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
+                self.rot -= d_rot - 2 * np.pi
+            elif self.ID is 10 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
+                self.rot -= d_rot - 2 * np.pi * 12 / n
+            elif self.ID is 10 and d_rot < -2 * np.pi * 13 / n and d_rot > -2 * np.pi * 1.1:
+                self.rot -= d_rot + 2 * np.pi
+            elif self.ID is 10 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
+                self.rot -= d_rot + 2 * np.pi * 12 / n
+            elif self.ID is 8 and d_rot > 2 * np.pi * 13 / n and d_rot < 2 * np.pi * 1.1:
+                self.rot -= d_rot - 2 * np.pi
+            elif self.ID is 8 and d_rot > 2 * np.pi * 10 / n and d_rot < 2 * np.pi * 13 / n:
+                self.rot -= d_rot - 2 * np.pi * 12 / n
+            elif self.ID is 8 and d_rot < -2 * np.pi * 13 / n and d_rot > -2 * np.pi * 1.1:
+                self.rot -= d_rot + 2 * np.pi
+            elif self.ID is 8 and d_rot < -2 * np.pi * 10 / n and d_rot > -2 * np.pi * 13 / n:
+                self.rot -= d_rot + 2 * np.pi * 12 / n
+            elif self.ID is 11 and d_rot > 2 * np.pi / n * 0.8:
+                self.rot -= d_rot - 2 * np.pi / n
+            elif self.ID is 11 and d_rot < -2 * np.pi / n * 0.8:
+                self.rot -= d_rot + 2 * np.pi / n
             else:
-                self.rot = self.calculateAbsoluteRotation()
+                self.rot -= d_rot
+            self.prevrot = self.calculateAbsoluteRotation()
+        else:
+            self.rot = self.calculateAbsoluteRotation()
 
         self.lifetime = 0
 

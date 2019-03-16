@@ -249,9 +249,12 @@ class ForceStamp (QtWidgets.QWidget):
 
         # find local peaks
         self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image, threshold=0.3)
+        self.peak_coords = forcestamp.findPeakCoord(self.f_image_peaks)
+        sub_peaks = forcestamp.findSubpixelPeaks(self.peak_coords, self.f_image)
 
         # find marker objects
-        markerCenters = forcestamp.findMarker(self.f_image_peaks, self.markerRadius, distanceTolerance=1, cMode=True)
+        # markerCenters = forcestamp.findMarker(self.peak_coords, self.markerRadius, distanceTolerance=1, cMode=True)
+        markerCenters = forcestamp.findMarker(sub_peaks, self.markerRadius, distanceTolerance=1, cMode=True)
         # forcestamp.findMarker(self.f_image_peaks, self.markerRadius)
 
         # retrieve marker parameters from marker coordinates
