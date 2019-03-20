@@ -496,7 +496,7 @@ def calculateForceVector(img):
 
     xv, yv = np.meshgrid(x, y)
 
-    vecMag = np.sqrt(np.power(xv - centerP, 2) + np.power(xv - centerP, 2))
+    vecMag = np.sqrt(np.power(xv - centerP, 2) + np.power(yv - centerP, 2))
     vecRad = np.arctan2(xv - centerP, yv - centerP)
     vecX = np.sum(img * vecMag * np.sin(vecRad))
     vecY = np.sum(img * vecMag * np.cos(vecRad))
