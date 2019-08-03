@@ -24,7 +24,7 @@ def open_sensel():
     return handle, info
 
 
-def init_frame(handle, setrate=125, detail=0, devbuffer=10):
+def init_frame(handle, setrate=125, detail=0, baseline=1, devbuffer=10):
 
     # Frame rate
     # setrate = 2000
@@ -41,7 +41,7 @@ def init_frame(handle, setrate=125, detail=0, devbuffer=10):
     print('Scan detail: ' + str(val))
 
     # Misc
-    error = sensel.setDynamicBaseline(handle, -1)
+    error = sensel.setDynamicBaseline(handle, baseline)
     error, val = sensel.getDynamicBaseline(handle)
     print('Dynamic baseline: ' + str(val))
 
@@ -78,6 +78,7 @@ def scan_frames(handle, frame, info):
     error = sensel.readSensor(handle)
     error, num_frames = sensel.getNumAvailableFrames(handle)
     # print('Available num frames:', num_frames)
+    f_image = np.zeros((info.num_rows, info.num_cols))
     for i in range(num_frames):
         error = sensel.getFrame(handle, frame)
         # print('Content bit mask: ', frame.content_bit_mask)

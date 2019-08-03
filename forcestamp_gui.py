@@ -12,6 +12,8 @@ import numpy as np
 import cv2
 from pythonosc import osc_message_builder
 from pythonosc import udp_client
+from oscpy.client import OSCClient
+
 import argparse
 from copy import deepcopy
 
@@ -45,9 +47,9 @@ class MarkerPopupWidget(QtWidgets.QWidget):
 
         self.rotation_fillColor = QtGui.QColor(240, 10, 10)
 
-        self.vector_fillColor = QtGui.QColor(255, 240, 40)
+        self.cof_fillColor = QtGui.QColor(255, 240, 40)
 
-        self.radius = 25 * 5
+        # self.radius = 25 * 5
         # print(self.parent.markers)
 
     def makeTriangle(self, centerx, centery, r, theta, dr=15, phi=0.1):
@@ -76,7 +78,7 @@ class MarkerPopupWidget(QtWidgets.QWidget):
         return triangle
 
     def paintEvent(self, event):
-        for mkr in self.parent.markers:
+        for mkr in self.parent.MarkerTracker.markers:
             if mkr.ID is not 0:
                 # # get current window size
                 # s = self.size()
@@ -99,37 +101,42 @@ class MarkerPopupWidget(QtWidgets.QWidget):
                 marker_fillColor = QtGui.QColor(240, 240, 240, 150)
                 qp.setBrush(marker_fillColor)
                 # radius = 25 * 5
-                centerx = mkr.posX * 5
-                centery = mkr.posY * 5
+                centerx = mkr.pos_x * 5
+                centery = mkr.pos_y * 5
+                radius = mkr.radius * 1.25 * 5
                 center = QtCore.QPoint(centerx, centery)
-                qp.drawEllipse(center, self.radius, self.radius)
-                qp.drawEllipse(center, forcestamp.constraint(self.radius * mkr.force / self.parent.force_sensitivity, 0, self.radius),
-                               forcestamp.constraint(self.radius * mkr.force / self.parent.force_sensitivity, 0, self.radius)
+                qp.drawEllipse(center, radius, radius)
+                qp.drawEllipse(center, forcestamp.constraint(radius * mkr.force / self.parent.force_sensitivity, 0, radius),
+                               forcestamp.constraint(radius * mkr.force / self.parent.force_sensitivity, 0, radius)
                                )
 
                 # Draw rotation
                 qp.setBrush(self.rotation_fillColor)
-                qp.drawPolygon(self.makeTriangle(centerx, centery, self.radius, mkr.rot))
+                qp.drawPolygon(self.makeTriangle(centerx, centery, radius, -mkr.rot + np.pi / 2))
 
                 # Draw force vector
-                # qp.setPen(self.vector_fillColor)
-                qp.setPen(QtGui.QPen(self.vector_fillColor, 7, QtCore.Qt.SolidLine))
-                qp.setBrush(self.vector_fillColor)
+                # qp.setPen(self.cof_fillColor)
+                qp.setPen(QtGui.QPen(self.cof_fillColor, 7, QtCore.Qt.SolidLine))
+                qp.setBrush(self.cof_fillColor)
                 # vec_len = mkr.force / 200
-                vecX = mkr.vecX / self.parent.vector_sensitivity * 20
-                vecY = mkr.vecY / self.parent.vector_sensitivity * 20
-                qp.drawLine(centerx, centery, centerx + vecX, centery - vecY)
+                cof_x = mkr.cof_x / self.parent.cof_sensitivity * 20
+                cof_y = mkr.cof_y / self.parent.cof_sensitivity * 20
+                # print(cof_y)
+                qp.drawLine(centerx, centery, centerx + cof_x, centery - cof_y)
                 qp.setPen(QtCore.Qt.NoPen)
-                qp.drawEllipse(center, 7, 7)
-                # qp.drawPolygon(self.makeTriangle(centerx, centery, vec_len, -mkr.vecY / mkr.vecX, 15, 0.3))
+                vecCenter = QtCore.QPoint(centerx + cof_x, centery - cof_y)
+                qp.drawEllipse(vecCenter, 7, 7)
+                # qp.drawPolygon(self.makeTriangle(centerx, centery, vec_len, -mkr.cof_y / mkr.cof_x, 15, 0.3))
 
                 font = QtGui.QFont()
                 font.setPixelSize(36)
                 font.setBold(False)
                 qp.setFont(font)
                 qp.setPen(QtGui.QColor(0, 0, 0))
-                text = 'ID: ' + str(mkr.ID)
-                qp.drawText(centerx - 35, centery - 20, text)
+                # text = 'ID: ' + str(mkr.ID)
+                text = str(mkr.ID)
+                # qp.drawText(centerx - 35, centery - 20, text)
+                qp.drawText(centerx - 7, centery - 20, text)
 
                 qp.end()
 
@@ -142,13 +149,13 @@ class IDparameter:
         self.posy_min = 0.0
         self.force_max = 100.0
         self.force_min = 0.0
-        self.vecx_max = 100.0
-        self.vecx_min = -100.0
-        self.vecy_max = 100.0
-        self.vecy_min = -100.0
+        self.cof_x_max = 100.0
+        self.cof_x_min = -100.0
+        self.cof_y_max = 100.0
+        self.cof_y_min = -100.0
 
     def printParameters(self):
-        print(self.posx_max, self.posx_min, self.posy_max, self.posy_min, self.force_max, self.force_min, self.vecx_max, self.vecx_min, self.vecy_max, self.vecy_min)
+        print(self.posx_max, self.posx_min, self.posy_max, self.posy_min, self.force_max, self.force_min, self.cof_x_max, self.cof_x_min, self.cof_y_max, self.cof_y_min)
 
 
 class MarkerPopupSignals(QtCore.QObject):
@@ -166,12 +173,14 @@ class ForceStamp (QtWidgets.QWidget):
 
         # param names
         self.param_names = ['posx_max', 'posx_min', 'posy_max', 'posy_min', 'force_max',
-                            'force_min', 'vecx_max', 'vecx_min', 'vecy_max', 'vecy_min']
+                            'force_min', 'cof_x_max', 'cof_x_min', 'cof_y_max', 'cof_y_min']
 
         # Morph size
         self.rows = 185
         self.cols = 105
-        self.markerRadius = 20
+        # self.radius = [12.8, 20]
+        self.marker_radii = [55 / 2 / 1.25, 17 / 1.25, 20.0, 16 / 1.25]
+        self.num_ID = 102
 
         # Initialize combobox items
         self.initComboBox()
@@ -183,7 +192,8 @@ class ForceStamp (QtWidgets.QWidget):
         self.initProgressBar()
 
         # initailize ID scale parameters
-        self.IDparam = [IDparameter() for count in range(12)]
+        self.IDs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 51, 80, 101]
+        self.IDparam = [IDparameter() for count in range(self.num_ID)]
 
         # initialize force image
         self.initViewBox()
@@ -206,13 +216,18 @@ class ForceStamp (QtWidgets.QWidget):
 
         # set marker sensitivity
         self.force_sensitivity = 3000
-        self.vector_sensitivity = 15000
+        self.cof_sensitivity = 10
 
         # store previous state
-        self.prevState = [0] * 12
+        self.prevState = [0] * self.num_ID
 
         # Setup OSC server
-        self.setupOSC()
+        # self.setupOSC()
+        address = '127.0.0.1'
+        # address = '192.168.0.3'
+        port = 12000
+        self.osc = OSCClient(address, port)
+
 
         # update interval
         self.interval = 0  # miliseconds
@@ -232,6 +247,9 @@ class ForceStamp (QtWidgets.QWidget):
         self.SIGNALS.OPEN.connect(self.onPopup)
         self.SIGNALS.CLOSE.connect(self.closePopup)
 
+        self.BlobTracker = forcestamp.TrackBlobs()
+        self.MarkerTracker = forcestamp.TrackMarkers(radii=self.marker_radii)
+
     def updateData(self):
         # scan image from the device
         try:
@@ -240,76 +258,19 @@ class ForceStamp (QtWidgets.QWidget):
             try:
                 sc.close_sensel(self.handle, self.frame)
                 # Open Morph
-                self.handle, self.info = sc.open_sensel()
+                self.handle, self.i = sc.open_sensel()
                 # Initalize frame
-                self.frame = sc.init_frame(self.handle)
+                self.frame = sc.init_frame(self.handle, baseline=0)
                 self.f_image = sc.scan_frames(self.handle, self.frame, self.info)
             except(UnboundLocalError):
                 self.f_image = np.zeros((self.rows, self.cols))
 
-        # find local peaks
-        self.f_image_peaks = forcestamp.findLocalPeaks(self.f_image, threshold=0.3)
-        self.peak_coords = forcestamp.findPeakCoord(self.f_image_peaks)
-        sub_peaks = forcestamp.findSubpixelPeaks(self.peak_coords, self.f_image)
+        # update blob information
+        self.blobs = self.BlobTracker.update(self.f_image)
 
-        # find marker objects
-        # markerCenters = forcestamp.findMarker(self.peak_coords, self.markerRadius, distanceTolerance=1, cMode=True)
-        markerCenters = forcestamp.findMarker(sub_peaks, self.markerRadius, distanceTolerance=1, cMode=True)
-        # forcestamp.findMarker(self.f_image_peaks, self.markerRadius)
-
-        # retrieve marker parameters from marker coordinates
-        tempMarkers = []
-        if len(self.markers) is 0:
-            for i in range(len(markerCenters)):
-                # print('first marker!')
-                marker = forcestamp.marker(self.f_image, self.f_image_peaks, self.markerRadius, markerCenters[i])
-                if marker.ID is not 0:
-                    tempMarkers.append(marker)
-        else:
-            # print('check existing markers')
-            for mkr in self.markers:
-                # check if the marker has disappeared
-                isGone = True
-                for i in range(len(markerCenters)):
-                    if forcestamp.distance(markerCenters[i], (mkr.posY, mkr.posX)) < 15:
-                        isGone = False
-                        break
-                if isGone:
-                    # print('increase lifetime!')
-                    mkr.lifetime += 1
-                    # print(mkr.lifetime)
-                    # print(mkr.posX, mkr.posY)
-                    if mkr.lifetime < 10:
-                        tempMarkers.append(mkr)
-
-            for i in range(len(markerCenters)):
-                isExist = False
-                # print(cnt)
-                for mkr in self.markers:
-                    # print(markerCenters[i])
-                    # print((104 - mkr.posY, mkr.posX))
-                    # print(forcestamp.distance(markerCenters[i], (mkr.posX, mkr.posY)))
-                    if forcestamp.distance(markerCenters[i], (mkr.posY, mkr.posX)) < 15:
-                        # print('existing marker!')
-                        mkr.updateProperties(self.f_image, self.f_image_peaks, self.markerRadius, markerCenters[i])
-                        tempMarkers.append(mkr)
-                        isExist = True
-                        break
-                if not isExist:
-                    # print('new marker!')
-                    marker = forcestamp.marker(self.f_image, self.f_image_peaks, self.markerRadius, markerCenters[i])
-                    if marker.ID is not 0:
-                        tempMarkers.append(marker)
-
-        self.markers = tempMarkers
-        # print('markerX: ' + str(self.markers[0].posX))
-        # print('markerY: ' + str(self.markers[0].posY))
-        # print('markerCode: ' + str(self.markers[0].code))
-        # self.markers[i].force = self.markers[i].sumForce()
-        # (self.markers[i].vecX, self.markers[i].vecY) = self.markers[i].vectorForce()
-        # self.markers[i].rot = self.markers[i].calculateAbsoluteRotation()
-
-        if len(self.markers) > 0:
+        # update marker information
+        self.MarkerTracker.update(self.f_image, self.blobs)
+        if len(self.MarkerTracker.markers) > 0:
             # print('markerID: ' + str(self.markers[0].ID))
             # print('markerForce: ' + str(self.markers[0].sumForce()))
             # print('markerVectorForce: ' + str(self.markers[0].vectorForce()))
@@ -323,17 +284,25 @@ class ForceStamp (QtWidgets.QWidget):
         # send marker parameters to GUI
         self.sendMarkerParameters()
 
+        '''
         # retrieve peak coordinates from the peak image
         self.peaks = forcestamp.findPeakCoord(self.f_image_peaks)
 
         # exclude marker areas from the peak coords
         self.f_image_peaks_excluded = deepcopy(self.f_image_peaks)
         for mkr in self.markers:
-            self.f_image_peaks_excluded = forcestamp.excludeMarkerPeaks(self.f_image_peaks_excluded, (mkr.posY, mkr.posX), self.markerRadius) 
-        self.peaks_excluded = forcestamp.findPeakCoord(self.f_image_peaks_excluded)        
+            self.f_image_peaks_excluded = forcestamp.excludeMarkerPeaks(self.f_image_peaks_excluded, (mkr.pos_y, mkr.pos_x), mkr.radius)
+        self.peaks_excluded = forcestamp.findPeakCoord(self.f_image_peaks_excluded)
+        self.peaks_excluded = forcestamp.findSubpixelPeaks(self.peaks_excluded, self.f_image)
+        self.peaks_force = []
+        for pk in self.peaks_excluded:
+            self.peaks_force.append(np.sum(forcestamp.cropImage(self.f_image, pk, radius=3, margin=1)))
+        # print(self.peaks_excluded)
+        # print(self.peaks_force)
         # print(self.peaks_excluded)
         if len(self.peaks_excluded) > 0:
-            self.sendOSC_coords(self.peaks_excluded)
+            self.sendOSC_coords(self.peaks_excluded, self.peaks_force)
+        '''
 
         # prepare a image copy for display
         f_image_show = deepcopy(self.f_image)
@@ -342,10 +311,10 @@ class ForceStamp (QtWidgets.QWidget):
         f_image_show = cv2.cvtColor(f_image_show.astype(np.uint8), cv2.COLOR_GRAY2RGB)
 
         # draw peaks
-        for cnt in self.peaks:
+        for b in self.blobs:
             cv2.circle(
                 f_image_show,
-                (np.int(cnt[::-1][0]), np.int(cnt[::-1][1])),
+                (np.int(b.cx), np.int(b.cy)),
                 0,
                 (0, 255, 255)
             )
@@ -370,7 +339,7 @@ class ForceStamp (QtWidgets.QWidget):
                 # Open Morph
                 self.handle, self.info = sc.open_sensel()
             # Initalize frame
-            self.frame = sc.init_frame(self.handle)
+            self.frame = sc.init_frame(self.handle, baseline=0)
 
             # update using timer
             # self.timer = QtCore.QTimer()
@@ -396,66 +365,112 @@ class ForceStamp (QtWidgets.QWidget):
 
     def sendMarkerParameters(self):
         posx_min = 30
-        posx_max = 184 - 30
+        posx_max = self.rows - 30
         posy_min = 30
-        posy_max = 104 - 30
+        posy_max = self.cols - 30
         force_min = 0
         # force_max = 8000
-        # vecx_min = -30000
-        # vecx_max = 30000
-        # vecy_min = -30000
-        # vecy_max = 30000
-        vecx_min = vecy_min = -self.vector_sensitivity
-        vecx_max = vecy_max = self.vector_sensitivity
+        # cof_x_min = -30000
+        # cof_x_max = 30000
+        # cof_y_min = -30000
+        # cof_y_max = 30000
+        cof_x_min = cof_y_min = -self.cof_sensitivity
+        cof_x_max = cof_y_max = self.cof_sensitivity
 
-        currentState = [0] * 12
+        currentState = [0] * self.num_ID
 
-        for mkr in self.markers:
-            # mkr.posY = 104 - mkr.posY
+        # self.sendOSC(len(self.MarkerTracker.markers), '/num')
+        self.osc.send_message(b'/num', [len(self.MarkerTracker.markers)])
+        # self.sendOSC([0.0, 0.0, 0.1], 'pos_x')
+        pos_x = []
+        pos_y = []
+        force = []
+        cof_x = []
+        cof_y = []
+        angle = []
+        id_list = []
+        radius = []
+
+        for mkr in self.MarkerTracker.markers:
+            # mkr.pos_y = 104 - mkr.pos_y
             # mkr.force = mkr.sumForce()
-            # (mkr.vecX, mkr.vecY) = mkr.vectorForce()
-            mkr.vecY *= -1
-            mkr.posX_scaled = (self.IDparam[mkr.ID].posx_max - self.IDparam[mkr.ID].posx_min) * ((forcestamp.constraint(mkr.posX, posx_min, posx_max) - posx_min) / (posx_max - posx_min)) + self.IDparam[mkr.ID].posx_min
-            mkr.posY_scaled = (self.IDparam[mkr.ID].posy_max - self.IDparam[mkr.ID].posy_min) * ((forcestamp.constraint(104 - mkr.posY, posy_min, posy_max) - posy_min) / (posy_max - posy_min)) + self.IDparam[mkr.ID].posy_min
+            # (mkr.cof_x, mkr.cof_y) = mkr.vectorForce()
+            # mkr.cof_y *= -1
+            mkr.pos_x_scaled = (self.IDparam[mkr.ID].posx_max - self.IDparam[mkr.ID].posx_min) * ((forcestamp.constraint(mkr.pos_x, posx_min, posx_max) - posx_min) / (posx_max - posx_min)) + self.IDparam[mkr.ID].posx_min
+            mkr.pos_y_scaled = (self.IDparam[mkr.ID].posy_max - self.IDparam[mkr.ID].posy_min) * ((forcestamp.constraint(self.cols - mkr.pos_y, posy_min, posy_max) - posy_min) / (posy_max - posy_min)) + self.IDparam[mkr.ID].posy_min
             mkr.force_scaled = (self.IDparam[mkr.ID].force_max - self.IDparam[mkr.ID].force_min) * ((forcestamp.constraint(mkr.force, force_min, self.force_sensitivity) - force_min) / (self.force_sensitivity - force_min)) + self.IDparam[mkr.ID].force_min
-            mkr.vecX_scaled = (self.IDparam[mkr.ID].vecx_max - self.IDparam[mkr.ID].vecx_min) * ((forcestamp.constraint(mkr.vecX, vecx_min, vecx_max) - vecx_min) / (vecx_max - vecx_min)) + self.IDparam[mkr.ID].vecx_min
-            mkr.vecY_scaled = (self.IDparam[mkr.ID].vecy_max - self.IDparam[mkr.ID].vecy_min) * ((forcestamp.constraint(mkr.vecY, vecy_min, vecy_max) - vecy_min) / (vecy_max - vecy_min)) + self.IDparam[mkr.ID].vecy_min
+            mkr.cof_x_scaled = (self.IDparam[mkr.ID].cof_x_max - self.IDparam[mkr.ID].cof_x_min) * ((forcestamp.constraint(mkr.cof_x, cof_x_min, cof_x_max) - cof_x_min) / (cof_x_max - cof_x_min)) + self.IDparam[mkr.ID].cof_x_min
+            mkr.cof_y_scaled = (self.IDparam[mkr.ID].cof_y_max - self.IDparam[mkr.ID].cof_y_min) * ((forcestamp.constraint(mkr.cof_y, cof_y_min, cof_y_max) - cof_y_min) / (cof_y_max - cof_y_min)) + self.IDparam[mkr.ID].cof_y_min
 
             # store current state
             currentState[mkr.ID] = 1
 
             # send osc data
-            self.sendOSC(mkr.posX_scaled, '/m' + str(mkr.ID) + '/posx')
-            self.sendOSC(mkr.posY_scaled, '/m' + str(mkr.ID) + '/posy')
-            self.sendOSC(mkr.force_scaled, '/m' + str(mkr.ID) + '/force')
-            self.sendOSC(mkr.vecX_scaled, '/m' + str(mkr.ID) + '/vecx')
-            self.sendOSC(mkr.vecY_scaled, '/m' + str(mkr.ID) + '/vecy')
-            self.sendOSC(np.rad2deg(mkr.rot), '/m' + str(mkr.ID) + '/rot')
-            self.sendOSC(mkr.ID, '/m' + str(mkr.ID) + '/id')
+            # self.sendOSC(mkr.pos_x_scaled, '/m' + str(mkr.ID) + '/pos_x')
+            # self.sendOSC(mkr.d_pos_x, '/m' + str(mkr.ID) + '/d_pos_x')
+            # self.sendOSC(mkr.pos_y_scaled, '/m' + str(mkr.ID) + '/pos_y')
+            # self.sendOSC(mkr.d_pos_y, '/m' + str(mkr.ID) + '/d_pos_y')
+            # self.sendOSC(mkr.force_scaled, '/m' + str(mkr.ID) + '/force')
+            # self.sendOSC(mkr.d_force, '/m' + str(mkr.ID) + '/d_force')
+            # self.sendOSC(mkr.cof_x_scaled, '/m' + str(mkr.ID) + '/cof_x')
+            # self.sendOSC(mkr.cof_y_scaled, '/m' + str(mkr.ID) + '/cof_y')
+            # self.sendOSC(mkr.d_cof_x, '/m' + str(mkr.ID) + '/d_cof_x')
+            # self.sendOSC(mkr.d_cof_y, '/m' + str(mkr.ID) + '/d_cof_y')
+            # self.sendOSC(np.rad2deg(mkr.rot), '/m' + str(mkr.ID) + '/rot')
+            # self.sendOSC(np.rad2deg(mkr.d_rot), '/m' + str(mkr.ID) + '/d_rot')
+            # self.sendOSC(mkr.ID, '/m' + str(mkr.ID) + '/id')
+            # osc.send_message(b'/ids', id_list)
+            pos_x.append(mkr.pos_x)
+            pos_y.append(mkr.pos_y)
+            force.append(mkr.force)
+            cof_x.append(mkr.cof_x)
+            cof_y.append(mkr.cof_y)
+            # angle.append(np.rad2deg(mkr.rot))
+            angle.append(mkr.rot)
+            id_list.append(mkr.ID)
+            radius.append(mkr.radius)
 
             if self.currentID == mkr.ID and mkr.ID is not 0:
                 # send current parameters
-                self.ui.progressBar_posx.setValue(mkr.posX_scaled * 10)
-                self.ui.progressBar_posy.setValue(mkr.posY_scaled * 10)
+                self.ui.progressBar_posx.setValue(mkr.pos_x_scaled * 10)
+                self.ui.progressBar_posy.setValue(mkr.pos_y_scaled * 10)
                 self.ui.progressBar_force.setValue(mkr.force_scaled * 10)
-                self.ui.progressBar_vecx.setValue(mkr.vecX_scaled * 10)
-                self.ui.progressBar_vecy.setValue(mkr.vecY_scaled * 10)
-                self.ui.value_posx.setText(('%.01f' % mkr.posX_scaled))
-                self.ui.value_posy.setText(('%.01f' % mkr.posY_scaled))
+                self.ui.progressBar_cof_x.setValue(mkr.cof_x_scaled * 10)
+                self.ui.progressBar_cof_y.setValue(mkr.cof_y_scaled * 10)
+                self.ui.value_posx.setText(('%.01f' % mkr.pos_x_scaled))
+                self.ui.value_posy.setText(('%.01f' % mkr.pos_y_scaled))
                 self.ui.value_force.setText(('%.01f' % mkr.force_scaled))
-                self.ui.value_vecx.setText(('%.01f' % mkr.vecX_scaled))
-                self.ui.value_vecy.setText(('%.01f' % mkr.vecY_scaled))
+                self.ui.value_cof_x.setText(('%.01f' % mkr.cof_x_scaled))
+                self.ui.value_cof_y.setText(('%.01f' % mkr.cof_y_scaled))
 
-        # send OSC messages when markers disappear
-        index = np.where((np.asarray(self.prevState, dtype=np.int8) - np.asarray(currentState, dtype=np.int8)) == 1)
-        # print(index[0])
-        for i in index[0]:
-            # print('send message to %d' % i)
-            # print('/m' + str(i) + '/force')
-            self.sendOSC(0.0, '/m' + str(i) + '/force')
-            # self.sendOSC(0.0, '/m' + str(i) + '/rot')
-            self.sendOSC(0.0, '/m' + str(i) + '/vecx')
-            self.sendOSC(0.0, '/m' + str(i) + '/vecy')
+        # self.sendOSC(pos_x, '/pos_x')
+        # self.sendOSC(pos_y, '/pos_y')
+        # self.sendOSC(force, '/force')
+        # self.sendOSC(cof_x, '/cof_x')
+        # self.sendOSC(cof_y, '/cof_y')
+        # self.sendOSC(angle, '/angle')
+        # self.sendOSC(id_list, '/id')
+        # self.sendOSC(radius, '/radius')
+        self.osc.send_message(b'/pos_x', pos_x)
+        self.osc.send_message(b'/pos_y', pos_y)
+        self.osc.send_message(b'/force', force)
+        self.osc.send_message(b'/cof_x', cof_x)
+        self.osc.send_message(b'/cof_y', cof_y)
+        self.osc.send_message(b'/angle', angle)
+        self.osc.send_message(b'/id', id_list)
+        self.osc.send_message(b'/radius', radius)
+
+        # # send OSC messages when markers disappear
+        # index = np.where((np.asarray(self.prevState, dtype=np.int8) - np.asarray(currentState, dtype=np.int8)) == 1)
+        # # print(index[0])
+        # for i in index[0]:
+        #     # print('send message to %d' % i)
+        #     # print('/m' + str(i) + '/force')
+        #     self.sendOSC(0.0, '/m' + str(i) + '/force')
+        #     # self.sendOSC(0.0, '/m' + str(i) + '/rot')
+        #     self.sendOSC(0.0, '/m' + str(i) + '/cof_x')
+        #     self.sendOSC(0.0, '/m' + str(i) + '/cof_y')
+
         # update state
         self.prevState = currentState
 
@@ -489,16 +504,21 @@ class ForceStamp (QtWidgets.QWidget):
         msgStruct = msgStruct.build()
         self.client.send(msgStruct)
 
-    def sendOSC_coords(self, msg):
+    def sendOSC_coords(self, coords, force):
         msgStructX = osc_message_builder.OscMessageBuilder(address='/coords/x')
         msgStructY = osc_message_builder.OscMessageBuilder(address='/coords/y')
-        for m in msg:
-            msgStructX.add_arg(int(m[1]))
-            msgStructY.add_arg(int(m[0]))
+        msgStructForce = osc_message_builder.OscMessageBuilder(address='/coords/force')
+        for m in coords:
+            msgStructX.add_arg(m[1])
+            msgStructY.add_arg(m[0])
+        for f in force:
+            msgStructForce.add_arg(f)
         msgStructX = msgStructX.build()
         msgStructY = msgStructY.build()
+        msgStructForce = msgStructForce.build()
         self.client.send(msgStructX)
         self.client.send(msgStructY)
+        self.client.send(msgStructForce)
 
     def initViewBox(self):
         # Create random image
@@ -533,6 +553,11 @@ class ForceStamp (QtWidgets.QWidget):
         self.ui.comboBox.addItem('9')
         self.ui.comboBox.addItem('10')
         self.ui.comboBox.addItem('11')
+        self.ui.comboBox.addItem('12')
+        self.ui.comboBox.addItem('51')
+        self.ui.comboBox.addItem('80')
+        self.ui.comboBox.addItem('101')
+
         self.currentID = 0
 
         # event on value change
@@ -547,10 +572,10 @@ class ForceStamp (QtWidgets.QWidget):
         self.IDparam[self.currentID].posy_min = self.ui.doubleSpinBox_posy_min.value()
         self.IDparam[self.currentID].force_max = self.ui.doubleSpinBox_force_max.value()
         self.IDparam[self.currentID].force_min = self.ui.doubleSpinBox_force_min.value()
-        self.IDparam[self.currentID].vecx_max = self.ui.doubleSpinBox_vecx_max.value()
-        self.IDparam[self.currentID].vecx_min = self.ui.doubleSpinBox_vecx_min.value()
-        self.IDparam[self.currentID].vecy_max = self.ui.doubleSpinBox_vecy_max.value()
-        self.IDparam[self.currentID].vecy_min = self.ui.doubleSpinBox_vecy_min.value()
+        self.IDparam[self.currentID].cof_x_max = self.ui.doubleSpinBox_cof_x_max.value()
+        self.IDparam[self.currentID].cof_x_min = self.ui.doubleSpinBox_cof_x_min.value()
+        self.IDparam[self.currentID].cof_y_max = self.ui.doubleSpinBox_cof_y_max.value()
+        self.IDparam[self.currentID].cof_y_min = self.ui.doubleSpinBox_cof_y_min.value()
 
         # change current marker ID
         if text == 'ID':
@@ -584,14 +609,14 @@ class ForceStamp (QtWidgets.QWidget):
         self.ui.doubleSpinBox_force_sens.setValue(3000)
         self.ui.doubleSpinBox_force_sens.setDecimals(0)
         self.ui.doubleSpinBox_force_sens.valueChanged.connect(self.onSensivityChanged)
-        self.ui.doubleSpinBox_vector_sens.setRange(0, 50000)
-        self.ui.doubleSpinBox_vector_sens.setValue(15000)
-        self.ui.doubleSpinBox_vector_sens.setDecimals(0)
-        self.ui.doubleSpinBox_vector_sens.valueChanged.connect(self.onSensivityChanged)
+        self.ui.doubleSpinBox_cof_sens.setRange(0, 50000)
+        self.ui.doubleSpinBox_cof_sens.setValue(5)
+        self.ui.doubleSpinBox_cof_sens.setDecimals(0)
+        self.ui.doubleSpinBox_cof_sens.valueChanged.connect(self.onSensivityChanged)
 
     def onSensivityChanged(self, value):
         self.force_sensitivity = self.ui.doubleSpinBox_force_sens.value()
-        self.vector_sensitivity = self.ui.doubleSpinBox_vector_sens.value()
+        self.cof_sensitivity = self.ui.doubleSpinBox_cof_sens.value()
 
     def onSpinBoxChanged(self, value):
         # sender is the latest signal
@@ -621,23 +646,23 @@ class ForceStamp (QtWidgets.QWidget):
         else:
             self.ui.progressBar_force.setRange(10 * self.ui.doubleSpinBox_force_max.value(), 10 * self.ui.doubleSpinBox_force_min.value())
 
-        if self.ui.doubleSpinBox_vecx_max.value() >= self.ui.doubleSpinBox_vecx_min.value():
-            self.ui.progressBar_vecx.setRange(10 * self.ui.doubleSpinBox_vecx_min.value(), 10 * self.ui.doubleSpinBox_vecx_max.value())
+        if self.ui.doubleSpinBox_cof_x_max.value() >= self.ui.doubleSpinBox_cof_x_min.value():
+            self.ui.progressBar_cof_x.setRange(10 * self.ui.doubleSpinBox_cof_x_min.value(), 10 * self.ui.doubleSpinBox_cof_x_max.value())
         else:
-            self.ui.progressBar_vecx.setRange(10 * self.ui.doubleSpinBox_vecx_max.value(), 10 * self.ui.doubleSpinBox_vecx_min.value())
+            self.ui.progressBar_cof_x.setRange(10 * self.ui.doubleSpinBox_cof_x_max.value(), 10 * self.ui.doubleSpinBox_cof_x_min.value())
 
-        if self.ui.doubleSpinBox_vecy_max.value() >= self.ui.doubleSpinBox_vecy_min.value():
-            self.ui.progressBar_vecy.setRange(10 * self.ui.doubleSpinBox_vecy_min.value(), 10 * self.ui.doubleSpinBox_vecy_max.value())
+        if self.ui.doubleSpinBox_cof_y_max.value() >= self.ui.doubleSpinBox_cof_y_min.value():
+            self.ui.progressBar_cof_y.setRange(10 * self.ui.doubleSpinBox_cof_y_min.value(), 10 * self.ui.doubleSpinBox_cof_y_max.value())
         else:
-            self.ui.progressBar_vecy.setRange(10 * self.ui.doubleSpinBox_vecy_max.value(), 10 * self.ui.doubleSpinBox_vecy_min.value())
+            self.ui.progressBar_cof_y.setRange(10 * self.ui.doubleSpinBox_cof_y_max.value(), 10 * self.ui.doubleSpinBox_cof_y_min.value())
 
     def initProgressBar(self):
         # Change corresponding progress bar range
         self.ui.progressBar_posx.setRange(10 * self.ui.doubleSpinBox_posx_min.value(), 10 * self.ui.doubleSpinBox_posx_max.value())
         self.ui.progressBar_posy.setRange(10 * self.ui.doubleSpinBox_posy_min.value(), 10 * self.ui.doubleSpinBox_posy_max.value())
         self.ui.progressBar_force.setRange(10 * self.ui.doubleSpinBox_force_min.value(), 10 * self.ui.doubleSpinBox_force_max.value())
-        self.ui.progressBar_vecx.setRange(10 * self.ui.doubleSpinBox_vecx_min.value(), 10 * self.ui.doubleSpinBox_vecx_max.value())
-        self.ui.progressBar_vecy.setRange(10 * self.ui.doubleSpinBox_vecy_min.value(), 10 * self.ui.doubleSpinBox_vecy_max.value())
+        self.ui.progressBar_cof_x.setRange(10 * self.ui.doubleSpinBox_cof_x_min.value(), 10 * self.ui.doubleSpinBox_cof_x_max.value())
+        self.ui.progressBar_cof_y.setRange(10 * self.ui.doubleSpinBox_cof_y_min.value(), 10 * self.ui.doubleSpinBox_cof_y_max.value())
 
     def closeEvent(self, event):
         print('Exit application')
