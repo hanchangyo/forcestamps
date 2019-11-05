@@ -1,2 +1,2 @@
-# forcestamp
-ForceStamp library for Sensel Morph
+# ForceStamps
+ForceStamps library for Sensel Morph
